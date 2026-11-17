@@ -177,14 +177,14 @@ export const SHRINE_ORDER = ['roots', 'cinders', 'tides', 'gales', 'hollow'];
 export const VEIL_REQ = { ember: 'roots', tide: 'cinders', storm: 'tides', gloam: 'gales' };
 
 export const NPCS = [
-  { id: 'elder', name: 'Elder Maren', x: 3, z: -6, look: { body: 0x6a4a8a, head: 0xe8c8a8, limb: 0x5a3f78, accent: 0xffd98a, hood: 0x4a3368 } },
+  { id: 'elder', name: 'Elder Maren', x: 4.5, z: 6.5, look: { body: 0x6a4a8a, head: 0xe8c8a8, limb: 0x5a3f78, accent: 0xffd98a, hood: 0x4a3368 } },
   { id: 'smith', name: 'Brannoc the Smith', x: -15, z: -5, look: { body: 0x7a4a2a, head: 0xc89a78, limb: 0x8a5a3a, accent: 0x3a3340 } },
   { id: 'merchant', name: 'Pip', x: 13, z: 9, look: { body: 0x3a8a7a, head: 0xf0d0b0, limb: 0x2f6f62, accent: 0xffd24a, hood: 0xd0562e } },
   { id: 'keeper', name: 'Keeper Oona', x: -6, z: 15, look: { body: 0x5a9a4a, head: 0xd8b090, limb: 0x4a7a3a, accent: 0xffffff } },
 ];
 
 export const QUESTS = [
-  { text: 'Speak with Elder Maren beneath the Lantern Tree.', at: [3, -6] },
+  { text: 'Speak with Elder Maren beneath the Lantern Tree.', at: [4.5, 6.5] },
   { text: 'Restore the Shrine of Roots, northwest across the meadow.', at: [-62, -66] },
   { text: 'Take the east pass to Emberridge and restore the Shrine of Cinders.', at: [258, -58] },
   { text: 'Take the south pass to Mirrormere and restore the Shrine of Tides.', at: [58, 258] },

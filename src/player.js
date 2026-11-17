@@ -6,7 +6,7 @@ import { audio } from './audio.js';
 import { fx, Trail } from './fx.js';
 import { clamp, damp, angDiff, angLerp, rand } from './util.js';
 import { EL } from './data.js';
-import { makePlayerModel, animate } from './models.js';
+import { makePlayerModel, animate, addXray } from './models.js';
 import { moveXZ } from './combat.js';
 
 const ATK = {
@@ -26,7 +26,7 @@ const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
 
 export class Player {
   constructor() {
-    this.model = makePlayerModel(); G.scene.add(this.model.root);
+    this.model = makePlayerModel(); addXray(this.model); G.scene.add(this.model.root);
     this.trail = new Trail(G.scene);
     this.pos = new THREE.Vector3(); this.vel = new THREE.Vector3(); this.yaw = 0; this.radius = 0.45;
     this.hp = 100; this.gauge = 0; this.potions = 3; this.elColor = 0xffffff;

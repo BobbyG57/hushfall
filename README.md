@@ -36,7 +36,9 @@ explore. Add `?slot=name` to the address for a second save file.
 
 | Action | Xbox controller | Keyboard and mouse |
 | --- | --- | --- |
-| Move / camera | Left stick / right stick | WASD / mouse (click the game first) or arrows |
+| Move | Left stick | WASD |
+| Zoom (Classic view) | Right stick up / down | Up / Down arrows |
+| Look around (Free camera view) | Right stick | Mouse (click the game first) or arrows |
 | Jump, interact | A | Space |
 | Dodge | B | Shift |
 | Light attack | X | J or left click |
@@ -48,6 +50,13 @@ explore. Add `?slot=name` to the address for a second save file.
 | Drink a Dewdrop | D-pad up | F |
 | Swap Kith | D-pad left / right | Z / X |
 | Menu / map | Menu / View | Esc or P / M |
+
+## Make it your own
+
+The default view is a fixed high-angle camera; the over-the-shoulder camera is
+under Menu, Status, View. To add your own sprites, ground textures, colours and
+title, and to find where names, dialogue and stats live, see
+[CUSTOMIZE.md](CUSTOMIZE.md).
 
 ## Things worth knowing
 
@@ -68,5 +77,6 @@ explore. Add `?slot=name` to the address for a second save file.
 
 - `index.html`, `style.css`: the page and HUD styling.
 - `src/`: the game, as plain JavaScript modules (no build step).
+- `assets/`: your own art goes here (see CUSTOMIZE.md). `assets/example/` holds a sample.
 - `vendor/`: the three.js renderer (MIT licence).
 - `server.py`: a tiny local web server (localhost only).

@@ -99,7 +99,7 @@ export const fx = {
       pcol[i * 4 + 3] = k; psize[i] = pbase[i] * (0.4 + 0.6 * k);
     }
     const g = points.geometry; g.attributes.position.needsUpdate = true; g.attributes.pcolor.needsUpdate = true; g.attributes.size.needsUpdate = true;
-    points.material.uniforms.uScale.value = innerHeight * 0.55 * (G.renderer ? G.renderer.getPixelRatio() : 1);
+    points.material.uniforms.uScale.value = innerHeight * 0.55 * (G.renderer ? G.renderer.getPixelRatio() : 1) * (G.camera ? 0.5774 / Math.tan(G.camera.fov * Math.PI / 360) : 1);
     // telegraphs
     for (let i = teles.length - 1; i >= 0; i--) {
       const t = teles[i]; t.t += dt; const k = Math.min(1, t.t / t.time);

@@ -11,6 +11,7 @@ import { Player } from './player.js';
 import { updateCombat, clearCombat, dropMotes, after } from './combat.js';
 import * as K from './kith.js';
 import { newSave, loadSave, storeSave, wipeSave, loadOpts, importCode } from './save.js';
+import { ART, loadArt } from './art.js';
 import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
 import { clamp, damp, lerp, smooth, angLerp, angDiff, rand, pick, weighted } from './util.js';
 
@@ -59,7 +60,10 @@ function updateEnv(dt) {
     sunDir.set(Math.cos(dayT * Math.PI * 2) * 0.75, Math.max(0.32, Math.abs(s)) + 0.12, 0.45).normalize();
   }
   const k = 1 - Math.exp(-2.4 * dt);
-  env.fog.lerp(tF, k); env.top.lerp(tT, k); env.sun.lerp(tS, k); env.amb += (amb - env.amb) * k; env.day += (dayl - env.day) * k; env.near += ((e.fogNear || 45) - env.near) * k; env.far += ((e.fogFar || 235) - env.far) * k;
+  env.fog.lerp(tF, k); env.top.lerp(tT, k); env.sun.lerp(tS, k); env.amb += (amb - env.amb) * k; env.day += (dayl - env.day) * k; 
+  // in the classic view the world fades out a short way past the top of the screen
+  const shortFog = isClassic() && G.player && !G.atTitle, fogN = shortFog ? G.cam.cur + 10 : (e.fogNear || 45), fogF = shortFog ? G.cam.cur + 44 : (e.fogFar || 235);
+  env.near += (fogN - env.near) * k; env.far += (fogF - env.far) * k; G.light = e.flat ? 0.92 : lerp(0.55, 1, env.day);
   scene.fog.color.copy(env.fog); scene.fog.near = env.near; scene.fog.far = env.far; renderer.setClearColor(env.fog);
   skyMat.uniforms.top.value.copy(env.top); skyMat.uniforms.bot.value.copy(env.fog);
   hemi.intensity = 1.3 * env.amb * lerp(0.5, 1, env.day);
@@ -72,11 +76,20 @@ function updateEnv(dt) {
 
 // ---------------------------------------------------------------- camera
 const camDir = new THREE.Vector3(), camLook = new THREE.Vector3(), tmp = new THREE.Vector3(); let titleT = 0;
+// 'classic' is a fixed high-angle view looking north, like a handheld-era RPG; 'free' orbits behind the hero
+const isClassic = () => G.opts.camera !== 'free';
+const CLASSIC = { pitch: 0.9, fov: 36, zoom: 30, zoomMin: 22, zoomMax: 44 };
+function setFov(f) { if (camera.fov !== f) { camera.fov = f; camera.updateProjectionMatrix(); } }
 function updateCamera(dt) {
   const c = G.cam;
-  if (G.atTitle || !G.player) { titleT += dt; const a = titleT * 0.05, y = world.heightAt(0, 0); camera.position.set(Math.sin(a) * 62, y + 24, Math.cos(a) * 62); camera.lookAt(0, y + 9, 0); return; }
-  const p = G.player, L = G.lock && !G.lock.dead ? G.lock : null;
-  if (G.mode === 'play') {
+  if (G.atTitle || !G.player) { setFov(60); titleT += dt; const a = titleT * 0.05, y = world.heightAt(0, 0); camera.position.set(Math.sin(a) * 62, y + 24, Math.cos(a) * 62); camera.lookAt(0, y + 9, 0); return; }
+  const p = G.player, L = G.lock && !G.lock.dead ? G.lock : null, classic = isClassic();
+  setFov(classic ? CLASSIC.fov : 60);
+  if (classic) {
+    // the right stick (or the up / down arrow keys) zooms; the angle and heading stay fixed
+    if (G.mode === 'play') c.zoom = clamp((c.zoom || CLASSIC.zoom) + input.camY * 16 * dt, CLASSIC.zoomMin, CLASSIC.zoomMax);
+    c.yaw = 0; c.pitch = CLASSIC.pitch;
+  } else if (G.mode === 'play') {
     const inv = G.opts.invertY ? -1 : 1;
     c.yaw -= input.camX * 2.7 * dt + input.mouseDX * 0.0028;
     c.pitch = clamp(c.pitch + (input.camY * 1.9 * dt + input.mouseDY * 0.0022) * inv, -0.3, 1.2);
@@ -86,7 +99,8 @@ function updateCamera(dt) {
     if (input.pressed('camReset')) { c.yaw = p.yaw + Math.PI; c.pitch = 0.34; }
   }
   let tx = p.pos.x, ty = p.pos.y + 1.55, tz = p.pos.z, dist = c.dist;
-  if (L) { const k = 0.28; tx = lerp(tx, L.pos.x, k); tz = lerp(tz, L.pos.z, k); ty = lerp(ty, L.pos.y + L.model.height * 0.5, k * 0.6); dist += Math.min(6, Math.hypot(L.pos.x - p.pos.x, L.pos.z - p.pos.z) * 0.35); }
+  if (classic) { ty = p.pos.y + 1.0; tz -= 2.2; dist = (c.zoom || CLASSIC.zoom) + (G.boss && !G.boss.dead ? 6 : 0); }
+  if (L) { const k = 0.28; tx = lerp(tx, L.pos.x, k); tz = lerp(tz, L.pos.z, k); ty = lerp(ty, L.pos.y + L.model.height * 0.5, k * 0.6); dist += Math.min(classic ? 9 : 6, Math.hypot(L.pos.x - p.pos.x, L.pos.z - p.pos.z) * 0.35); }
   if (c.snap) { camLook.set(tx, ty, tz); c.cur = dist; c.snap = false; }
   else { camLook.x = damp(camLook.x, tx, 14, dt); camLook.z = damp(camLook.z, tz, 14, dt); camLook.y = damp(camLook.y, ty, 9, dt); }
   const cp = Math.cos(c.pitch); camDir.set(Math.sin(c.yaw) * cp, Math.sin(c.pitch), Math.cos(c.yaw) * cp);
@@ -141,7 +155,7 @@ const genWaves = (f) => [genWave(3 + f * 0.7, f), genWave(3.5 + f * 0.75, f), ..
 let flickCd = 0;
 function toggleLock() {
   if (G.lock) { G.lock = null; audio.sfx('uiBack'); return; }
-  const p = G.player, fy = G.cam.yaw + Math.PI; let best = null, bs = 1e9;
+  const p = G.player, fy = isClassic() ? p.yaw : G.cam.yaw + Math.PI; let best = null, bs = 1e9;
   for (const e of G.enemies) {
     if (e.dead || e.spawnT > 0 || e.hidden) continue;
     const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz); if (d > 34) continue;
@@ -356,7 +370,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const raw = Math.min(0.05, Math.max(0.001, (now - last) / 1000)); last = now; G.rawDt = raw;
   try {
-    input.update(raw); input.wantLock = G.mode === 'play';
+    input.update(raw); input.wantLock = G.mode === 'play' && !isClassic();
     if (input.anyPress) audio.resume();
     if (G.mode !== 'play' && document.pointerLockElement) document.exitPointerLock();
     let dt = 0;
@@ -397,6 +411,9 @@ function frame(now) {
 loadOpts(G.opts); applyQuality();
 fx.init(scene); input.init(canvas); ui.init();
 G.save = loadSave(); const hadSave = !!G.save; if (!G.save) G.save = newSave();
+await loadArt();   // optional custom art from assets/art.json (see CUSTOMIZE.md)
+if (ART.title) { document.getElementById('tlogo').textContent = ART.title; document.title = ART.title; }
+if (ART.subtitle) document.getElementById('tsub').textContent = ART.subtitle;
 world.build(); scene.add(world.group); G.area = world;
 G.atTitle = true; ui.titleMenu(hadSave); audio.setMood('title');
 // a transfer link (...#save=CODE) offers to load that save on this device

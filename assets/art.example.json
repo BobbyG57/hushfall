@@ -1,0 +1,11 @@
+{
+  "title": "HUSHFALL",
+  "subtitle": "Blade of the Kith",
+  "sprites": {
+    "player": { "file": "example/hero.png", "frames": 4, "rows": 4, "height": 2.1, "fps": 8 }
+  },
+  "ground": { "file": "example/ground.png", "size": 3 },
+  "biomes": {
+    "meadow": { "g1": "#5fb24a", "g2": "#93d066", "grass": "#74cf54" }
+  }
+}

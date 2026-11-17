@@ -1,7 +1,9 @@
 // Every character is built from flat-shaded primitives and animated procedurally. No art assets.
 import * as THREE from 'three';
 import { EL, KITH } from './data.js';
-import { lerp, damp } from './util.js';
+import { lerp, damp, angDiff } from './util.js';
+import { G } from './state.js';
+import { ART } from './art.js';
 
 export const GEO = {
   box: new THREE.BoxGeometry(1, 1, 1),
@@ -296,8 +298,79 @@ function animWraith(M, a, dt) {
   p.body.position.y = damp(p.body.position.y, a.pose === 'dead' ? 0.3 : M.baseY + Math.sin(t * 2.4) * 0.14, 12, dt);
 }
 
+
+// ---------------------------------------------------------------- custom 2D sprites (see CUSTOMIZE.md)
+// A character with an entry in assets/art.json is drawn as a camera-facing sprite instead of the
+// built-in blocky model. Sheets are `frames` columns wide and 1 or 4 rows tall (down, left, right, up).
+const shadowGeo = new THREE.CircleGeometry(0.5, 20).rotateX(-Math.PI / 2), _fc = new THREE.Color();
+function makeSpriteModel(d, o = {}) {
+  const M = new Model('sprite'); M.def = d;
+  const h = d.height || o.height || 1.8, w = h * d.aspect, hover = d.hover || o.hover || 0;
+  const tex = d.tex.clone(); tex.needsUpdate = true; tex.repeat.set(1 / d.frames, 1 / d.rows); tex.offset.set(0, 1 - 1 / d.rows);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.35 }); M.spriteMat = mat;
+  M.tint = new THREE.Color(0xffffff); if (o.tint) M.tint.lerp(new THREE.Color(o.tint), 0.2); mat.color.copy(M.tint);
+  const sp = new THREE.Sprite(mat); sp.center.set(0.5, 0); sp.scale.set(w, h, 1); sp.position.y = hover; M.root.add(sp); M.sprite = sp; M.hoverY = hover;
+  M.shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false });
+  const sh = new THREE.Mesh(shadowGeo, M.shadowMat); sh.scale.setScalar(Math.max(0.5, w * 0.75)); sh.position.y = 0.06; sh.renderOrder = 1; M.root.add(sh);
+  M.height = h + hover; M.baseY = 0; M.hover = hover > 0;
+  if (o.blade) { // an invisible sword arm, so swings still show a blade and a trail
+    const arm = M.piv('swing', 0, h * 0.5, 0, M.root, 'YXZ');
+    M.bladeMat = new THREE.MeshLambertMaterial({ color: 0xeef4ff, flatShading: true, emissive: 0x556070 });
+    const b = new THREE.Mesh(GEO.box, M.bladeMat); b.scale.set(0.07, 0.18, 1.25); b.position.set(0, 0, 1.05); b.visible = false; arm.add(b); M.blade = b;
+    M.piv('bladeBase', 0, 0, 0.45, arm); M.piv('bladeTip', 0, 0, 1.7, arm);
+  }
+  M.tick = function (dt) {
+    if (this.flash > 0 || this._fl) { this.flash = Math.max(0, this.flash - dt * 5); this._fl = this.flash > 0; }
+    mat.color.copy(this.tint).multiplyScalar(G.light || 1); if (this._fl) mat.color.lerp(_fc.copy(this.flashCol).multiplyScalar(3), this.flash * 0.8);
+  };
+  M.dispose = function () { tex.dispose(); mat.dispose(); this.shadowMat.dispose(); if (this.bladeMat) this.bladeMat.dispose(); if (this.xray) this.xray.material.dispose(); };
+  return M;
+}
+function animSprite(M, a, dt) {
+  const d = M.def, tex = M.spriteMat.map, rel = angDiff(G.cam ? G.cam.yaw : 0, M.root.rotation.y);
+  let row = 0, flip = 1;
+  if (d.rows === 4) row = Math.abs(rel) < 0.79 ? 0 : Math.abs(rel) > 2.36 ? 3 : rel > 0 ? 2 : 1;
+  else if (d.faces === 'right') flip = rel < 0 ? -1 : 1;
+  const moving = (a.run || 0) > 0.15 || M.hover || a.air;
+  const col = moving && a.pose !== 'dead' ? Math.floor(a.t * d.fps) % d.frames : 0;
+  tex.repeat.x = flip / d.frames; tex.offset.set((flip > 0 ? col : col + 1) / d.frames, 1 - (row + 1) / d.rows);
+  const rot = a.pose === 'dead' ? 1.45 : a.pose === 'hurt' ? Math.sin(a.t * 40) * 0.14 : a.pose === 'dodge' ? -0.5 * flip : 0;
+  M.spriteMat.rotation = damp(M.spriteMat.rotation, rot, 14, dt);
+  M.sprite.position.y = M.hoverY + (M.hover ? Math.sin(a.t * 2.6) * 0.12 : 0);
+  if (M.xray) { M.xray.position.y = M.sprite.position.y; M.xray.material.rotation = M.spriteMat.rotation; }
+  if (M.blade) {
+    const k = Math.min(1, Math.max(0, a.ph || 0)), e = k * k * (3 - 2 * k); let vis = true, ax = 0, ay = 0;
+    switch (a.pose) {
+      case 'h1': ay = lerp(-1.5, 1.15, e); break;
+      case 'h2': ay = lerp(1.15, -1.5, e); break;
+      case 'v': ax = lerp(-1.6, 0.5, e); break;
+      case 'spin': ay = e * Math.PI * 2; break;
+      case 'thrust': ax = 0; break;
+      case 'over': ax = -1.6; break;
+      case 'charge': ay = -1.4; break;
+      case 'guard': ay = 0.9; ax = -0.9; break;
+      default: vis = false;
+    }
+    M.blade.visible = vis; M.p.swing.rotation.set(ax, ay, 0);
+  }
+}
+const SPRITE_H = { husk: 1.9, skitter: 0.8, spitter: 1.7, brute: 3.1, warder: 2.2, wraith: 2.1, ghorn: 5, cindermaw: 4, brine: 4, skarn: 3, king: 4.4 };
+function spriteFor(key, o) { const d = ART.sprites[key]; return d ? makeSpriteModel(d, o) : null; }
+
+// A flat silhouette that shows wherever the hero is hidden behind a tree, wall or creature.
+export function addXray(M) {
+  if (M.kind === 'sprite') {
+    const sm = new THREE.SpriteMaterial({ map: M.spriteMat.map, color: 0x8fd8ff, transparent: true, opacity: 0.55, alphaTest: 0.35, depthFunc: THREE.GreaterDepth, depthWrite: false });
+    const s = new THREE.Sprite(sm); s.center.copy(M.sprite.center); s.scale.copy(M.sprite.scale); s.renderOrder = 1; M.sprite.renderOrder = 2; M.root.add(s); M.xray = s; return;
+  }
+  const mat = new THREE.MeshBasicMaterial({ color: 0x8fd8ff, depthFunc: THREE.GreaterDepth, depthWrite: false, fog: false });
+  const list = []; M.root.traverse((o) => { if (o.isMesh) list.push(o); });
+  for (const o of list) { o.renderOrder = 2; const x = new THREE.Mesh(o.geometry, mat); x.renderOrder = 1; o.add(x); }
+}
+
 export function animate(M, a, dt) {
   switch (M.kind) {
+    case 'sprite': animSprite(M, a, dt); break;
     case 'humanoid': animHumanoid(M, a, dt); break;
     case 'creature': animCreature(M, a, dt); break;
     case 'spitter': animSpitter(M, a, dt); break;
@@ -308,21 +381,24 @@ export function animate(M, a, dt) {
 
 // ---------------------------------------------------------------- factories
 export function makePlayerModel() {
-  return makeHumanoid({
+  return spriteFor('player', { height: 1.9, blade: true }) || makeHumanoid({
     colors: { body: 0x2f3f6a, head: 0xf0cfa8, limb: 0x26335a, accent: 0xffd98a, hood: 0x1f2a4a, leg: 0x1c2440, foot: 0x4a3426, hand: 0xf0cfa8 },
     eyes: 0x1a1a22, eyeEm: 0, hood: 1, scarf: 0xd0412f, belt: 1, weapon: 'sword',
   });
 }
-export function makeNpcModel(look) {
-  const M = makeHumanoid({ colors: { ...look, hand: look.head }, eyes: 0x1a1a22, eyeEm: 0, hood: look.hood ? 1 : 0, belt: 1 });
+export function makeNpcModel(look, id) {
+  const M = spriteFor('npc.' + id, { height: 1.9 }) || makeHumanoid({ colors: { ...look, hand: look.head }, eyes: 0x1a1a22, eyeEm: 0, hood: look.hood ? 1 : 0, belt: 1 });
   return M;
 }
 export function makeKithModel(species, evolved, scaleMul = 1) {
-  const s = KITH[species];
+  const s = KITH[species], h = s.m.size * 1.15 * scaleMul, hover = s.m.body === 'bird' ? 0.9 : 0;
+  const sp = (evolved && spriteFor('kith.' + species + '.evo', { height: h * 1.3, hover })) || spriteFor('kith.' + species, { height: h * (evolved ? 1.3 : 1), hover });
+  if (sp) return sp;
   return makeCreature({ ...s.m, size: s.m.size * (evolved ? 1.32 : 1) * scaleMul, evolved });
 }
 export function makeEnemyModel(type, el, elite) {
   const c = EL[el].color, dk = 0x2a2634, dk2 = 0x1c1924, mid = 0x3a3546;
+  const sp = spriteFor('enemy.' + type, { height: (SPRITE_H[type] || 1.9) * (elite ? 1.3 : 1), tint: c, hover: type === 'wraith' ? 0.5 : 0 }); if (sp) return sp;
   switch (type) {
     case 'husk': return makeHumanoid({ scale: elite ? 1.3 : 1, colors: { body: dk, head: dk2, limb: mid, accent: c, hand: c }, eyes: c, weapon: 'claws', tw: 0.5, aw: 0.16, al: 0.82, hunch: 0.25, emHands: 1 });
     case 'brute': return makeHumanoid({ scale: elite ? 2.05 : 1.7, colors: { body: dk, head: dk2, limb: mid, accent: c }, eyes: c, weapon: 'club', tw: 0.98, th: 0.82, td: 0.6, aw: 0.34, al: 0.86, lw: 0.32, leg: 0.66, hs: 0.38, plates: c });
@@ -334,6 +410,7 @@ export function makeEnemyModel(type, el, elite) {
   return makeHumanoid({ colors: { body: dk, head: dk2, limb: mid, accent: c }, eyes: c });
 }
 export function makeBossModel(id) {
+  const sp = spriteFor('boss.' + id, { height: SPRITE_H[id] || 4, hover: id === 'brine' ? 0.6 : 0 }); if (sp) return sp;
   switch (id) {
     case 'ghorn': return makeHumanoid({ scale: 2.5, colors: { body: 0x5a4030, head: 0x4a3426, limb: 0x6a4a34, accent: 0x4e9a3a, hand: 0x4a3426 }, eyes: 0x9fff6a, weapon: 'club', tw: 1.0, th: 0.9, td: 0.62, aw: 0.34, al: 0.9, lw: 0.34, leg: 0.7, hs: 0.42, plates: 0x4e9a3a, horns: 0x8a6a3a, mossy: 1 });
     case 'cindermaw': return makeCreature({ body: 'quad', size: 3.1, c1: 0x3a2422, c2: 0xff5a1a, c3: 0xffc23a, horns: 3, spikes: 1, mane: 1, tail: 'flame', eyeGlow: 1, ears: 'point' });

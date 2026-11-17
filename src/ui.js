@@ -133,7 +133,7 @@ export const ui = {
     }, 'Load it');
   },
   controlsHtml() {
-    const rows = [['Move / Camera', 'Left stick / Right stick', 'WASD / Mouse or Arrows'], ['Jump, interact', 'A', 'Space'], ['Dodge', 'B', 'Shift'], ['Light attack', 'X', 'J or Left click'], ['Heavy attack (hold to charge)', 'Y', 'K or Right click'], ['Guard, tap to parry', 'LB', 'Q'], ['Kith Bond Art', 'RB', 'E'], ['Lock on', 'LT', 'Tab or C'], ['Bond Rite / Unison Burst', 'RT', 'R'], ['Drink Dewdrop', 'D-pad Up', 'F'], ['Swap Kith', 'D-pad Left / Right', 'Z / X'], ['Menu', 'Menu button', 'Esc or P'], ['Map', 'View button', 'M']];
+    const rows = [['Move', 'Left stick', 'WASD'], ['Zoom (Classic view)', 'Right stick up / down', 'Up / Down arrows'], ['Look around (Free camera view)', 'Right stick', 'Mouse or Arrows'], ['Jump, interact', 'A', 'Space'], ['Dodge', 'B', 'Shift'], ['Light attack', 'X', 'J or Left click'], ['Heavy attack (hold to charge)', 'Y', 'K or Right click'], ['Guard, tap to parry', 'LB', 'Q'], ['Kith Bond Art', 'RB', 'E'], ['Lock on', 'LT', 'Tab or C'], ['Bond Rite / Unison Burst', 'RT', 'R'], ['Drink Dewdrop', 'D-pad Up', 'F'], ['Swap Kith', 'D-pad Left / Right', 'Z / X'], ['Menu', 'Menu button', 'Esc or P'], ['Map', 'View button', 'M']];
     return `<table><tr><td></td><td><b>Xbox controller</b></td><td><b>Keyboard</b></td></tr>${rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table><p style="margin-top:10px">Combos: Light x4. Light, Light, Heavy for Cleave. Light x3, Heavy for Skybreaker. Dodge then Light for Dash Slash. Heavy in the air to Plunge. Unlock these under Skills.</p>`;
   },
   kithSide(k) {
@@ -166,7 +166,8 @@ export const ui = {
         { label: 'Resume', act: () => this.closeMenu(true) },
         { label: 'Save game', act: () => { G.game.save(); this.toast('Game saved.'); } },
         { label: 'Transfer save', act: () => { G.game.save(); this.transferMenu(false); } },
-        { label: 'Camera: ' + (G.opts.invertY ? 'Inverted Y' : 'Normal Y'), act: () => { G.opts.invertY = !G.opts.invertY; storeOpts(G.opts); } },
+        { label: 'View: ' + (G.opts.camera === 'free' ? 'Free camera (behind the hero)' : 'Classic (fixed overhead)'), act: () => { G.opts.camera = G.opts.camera === 'free' ? 'classic' : 'free'; G.cam.pitch = 0.34; G.cam.yaw = G.player.yaw + Math.PI; storeOpts(G.opts); } },
+        { label: 'Free camera Y: ' + (G.opts.invertY ? 'Inverted' : 'Normal'), act: () => { G.opts.invertY = !G.opts.invertY; storeOpts(G.opts); } },
         { label: 'Volume: ' + Math.round(G.opts.volume * 100) + '%', act: () => { let v = G.opts.volume + 0.2; if (v > 1.01) v = 0; audio.setVolume(Math.round(v * 10) / 10); storeOpts(G.opts); } },
         { label: 'Graphics: ' + (G.opts.quality ? 'High' : 'Fast'), act: () => { G.opts.quality = G.opts.quality ? 0 : 1; storeOpts(G.opts); G.game.applyQuality(); } },
         { label: 'Toggle fullscreen', act: () => { if (document.fullscreenElement) document.exitFullscreen(); else { const r = document.documentElement.requestFullscreen(); if (r && r.catch) r.catch(() => this.toast('Click this option with the mouse, or press Ctrl+Cmd+F, to go fullscreen.')); } } },

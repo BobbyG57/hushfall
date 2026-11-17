@@ -6,6 +6,7 @@ import { BIOME, PASS, WAYSTONES, SHRINES, CAMPS, KZONES, KTABLE, RIFTS, NPCS, EL
 import { makeNpcModel, animate } from './models.js';
 import { spawnEnemy, spawnWild } from './enemies.js';
 import { fx } from './fx.js';
+import { ART } from './art.js';
 
 const SIZE = 640, HALF = 320, N = 256, CELL = SIZE / N, NV = N + 1;
 const H = new Float32Array(NV * NV);
@@ -103,7 +104,7 @@ const glow = (color, op = 1) => new THREE.MeshBasicMaterial({ color, transparent
 function mesh(geo, mat, sx, sy, sz, x, y, z, parent, shadow = true) { const m = new THREE.Mesh(geo, mat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); m.castShadow = shadow; parent.add(m); return m; }
 
 export const world = {
-  kind: 'overworld', slope: true, group: new THREE.Group(), interactables: [], zones: [], veils: [], pois: [], flats: [], spinners: [], npcs: [], shards: [], propMeshes: [], way: {}, mapCanvas: null, zoneT: 0, veilMsgT: 0,
+  kind: 'overworld', slope: true, group: new THREE.Group(), interactables: [], zones: [], veils: [], pois: [], flats: [], spinners: [], npcs: [], shards: [], propMeshes: [], canopy: [], way: {}, mapCanvas: null, zoneT: 0, veilMsgT: 0,
 
   heightAt(x, z) {
     const fx_ = (x + HALF) / CELL, fz = (z + HALF) / CELL;
@@ -163,7 +164,12 @@ export const world = {
     mctx.putImageData(img, 0, 0); this.mapCanvas = mc;
     let k = 0; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * NV + i, b = a + NV, d = a + 1, cc = b + 1; idx[k++] = a; idx[k++] = b; idx[k++] = d; idx[k++] = b; idx[k++] = cc; idx[k++] = d; }
     const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); tg.setAttribute('color', new THREE.BufferAttribute(col, 3)); tg.setIndex(new THREE.BufferAttribute(idx, 1)); tg.computeBoundingSphere();
-    const terrain = new THREE.Mesh(tg, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })); terrain.receiveShadow = true; g.add(terrain);
+    const tmat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    if (ART.ground) { // custom ground texture, tinted by the biome colours
+      const uv = new Float32Array(NV * NV * 2), sz = ART.ground.size; for (let o = 0; o < NV * NV; o++) { uv[o * 2] = pos[o * 3] / sz; uv[o * 2 + 1] = pos[o * 3 + 2] / sz; }
+      tg.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); tmat.map = ART.ground.tex;
+    }
+    const terrain = new THREE.Mesh(tg, tmat); terrain.receiveShadow = true; g.add(terrain);
     const water = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3aa8e0, transparent: true, opacity: 0.7, emissive: 0x0a3a5a })); water.position.y = 0; g.add(water);
 
     // ---- props
@@ -216,7 +222,7 @@ export const world = {
     // Lantern Tree
     const tree = new THREE.Group(); tree.position.set(0, y0, 0); g.add(tree);
     mesh(PG.cyl, lit(0x6b4a2b), 3.2, 10, 3.2, 0, 0, 0, tree);
-    for (const [x, y, z, s, cl] of [[0, 9, 0, 11, 0x3f9a3c], [3.5, 11.5, 1, 7, 0x58b84a], [-3, 11, -2, 7.5, 0x4aa641], [0.5, 13, -1, 6, 0x7fd060]]) mesh(PG.sph, lit(cl), s, s * 0.8, s, x, y, z, tree);
+    for (const [x, y, z, s, cl] of [[0, 9, 0, 11, 0x3f9a3c], [3.5, 11.5, 1, 7, 0x58b84a], [-3, 11, -2, 7.5, 0x4aa641], [0.5, 13, -1, 6, 0x7fd060]]) { const cm = lit(cl); cm.transparent = true; this.canopy.push(cm); mesh(PG.sph, cm, s, s * 0.8, s, x, y, z, tree); }
     const lm = glow(0xffd98a);
     for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28, r = 3.5 + (i % 3); mesh(PG.sph, lm, 0.45, 0.6, 0.45, Math.cos(a) * r, 6.2 + (i % 2) * 1.2, Math.sin(a) * r, tree, false); }
     const pl = new THREE.PointLight(0xffd98a, 60, 38, 1.6); pl.position.set(0, 6, 0); tree.add(pl);
@@ -238,7 +244,7 @@ export const world = {
     this.interactables.push({ pos: new THREE.Vector3(-16, well.position.y, 12), r: 3.4, label: () => (G.save.relics.cinders ? 'Descend into the Abyss' : 'Examine the well'), use: () => G.game.useWell() });
     // NPCs
     for (const n of NPCS) {
-      const m = makeNpcModel(n.look); const y = this.heightAt(n.x, n.z); m.root.position.set(n.x, y, n.z); m.root.rotation.y = Math.atan2(-n.x, -n.z); g.add(m.root);
+      const m = makeNpcModel(n.look, n.id); const y = this.heightAt(n.x, n.z); m.root.position.set(n.x, y, n.z); m.root.rotation.y = Math.atan2(-n.x * 0.35, 1); g.add(m.root);
       this.npcs.push({ m, t: rand(10) }); addCircle(n.x, n.z, 0.6);
       this.interactables.push({ pos: new THREE.Vector3(n.x, y, n.z), r: 2.9, label: 'Talk to ' + n.name, use: () => G.game.talk(n.id) });
     }
@@ -371,6 +377,9 @@ export const world = {
       if (sh.taken) continue; sh.gem.rotation.y = t * 2; sh.gem.position.y = 0.9 + Math.sin(t * 2.4 + sh.x) * 0.2;
       if (Math.hypot(p.x - sh.x, p.z - sh.z) < 1.9 && Math.abs(p.y - sh.y) < 3) { sh.taken = true; sh.grp.visible = false; G.game.takeShard(sh); }
     }
+    // let the Lantern Tree's canopy go see-through when the hero walks behind it in the fixed view
+    const behind = G.opts.camera !== 'free' && p.z < 2 && p.z > -17 && Math.abs(p.x) < 9.5;
+    for (const cm of this.canopy) cm.opacity += ((behind ? 0.22 : 1) - cm.opacity) * Math.min(1, dt * 6);
     for (const n of this.npcs) { n.t += dt; if (Math.hypot(p.x - n.m.root.position.x, p.z - n.m.root.position.z) < 50) animate(n.m, { t: n.t, run: 0 }, dt); }
   },
 };

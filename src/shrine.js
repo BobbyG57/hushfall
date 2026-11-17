@@ -7,11 +7,13 @@ import { fx } from './fx.js';
 import { audio } from './audio.js';
 import { spawnEnemy, spawnBoss } from './enemies.js';
 import { beam, vent, after } from './combat.js';
+import { ART } from './art.js';
 
 const DIM = { start: [14, 14], combat: [30, 30], gauntlet: [12, 44], fount: [16, 16], boss: [46, 46] };
 const CL = 9, WALL_H = 6;
 let tileTex = null;
 function tiles() {
+  if (ART.floor) return ART.floor.tex;
   if (tileTex) return tileTex;
   const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
   x.fillStyle = '#6f6c7e'; x.fillRect(0, 0, 128, 128);
@@ -31,8 +33,10 @@ export function buildShrine(def, opt = {}) {
   const gateMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
   const portalMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
   const box = (mat, sx, sy, sz, x, y, z, shadow = true) => { const m = new THREE.Mesh(boxGeo, mat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; group.add(m); return m; };
-  const floor = (x0, x1, z0, z1) => { const w = x1 - x0, d = z1 - z0, g = new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 4, uv.getY(i) * d / 4); const m = new THREE.Mesh(g, floorMat); m.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2); m.receiveShadow = true; group.add(m); };
-  const hWall = (xa, xb, z) => { if (xb - xa > 0.1) box(wallMat, xb - xa, WALL_H, 1, (xa + xb) / 2, WALL_H / 2, z); };
+  const floor = (x0, x1, z0, z1) => { const w = x1 - x0, d = z1 - z0, g = new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), uv = g.attributes.uv; const ts = ART.floor ? ART.floor.size : 4; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / ts, uv.getY(i) * d / ts); const m = new THREE.Mesh(g, floorMat); m.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2); m.receiveShadow = true; group.add(m); };
+  // with the fixed high-angle view the camera looks in over the near (south) walls, so those are kept low
+  const low = G.opts.camera !== 'free', frontH = low ? 1.4 : WALL_H, pillarH = low ? 3.4 : WALL_H;
+  const hWall = (xa, xb, z, h = WALL_H) => { if (xb - xa > 0.1) box(wallMat, xb - xa, h, 1, (xa + xb) / 2, h / 2, z); };
 
   const A = {
     kind: 'shrine', mode: opt.mode || 'shrine', def, el: def.el, level: def.level, group, rects: [], rooms: [], corrs: [], circles: [], interactables: [], hazardDefs: [], portals: [], checkpoint: null, opt, start: { x: 0, z: -5 },
@@ -40,7 +44,7 @@ export function buildShrine(def, opt = {}) {
     env() { return { flat: true, fog: dark, fogNear: 22, fogFar: 95, sun: new THREE.Color(0xffffff).lerp(c3, 0.1), amb: 0.68 }; },
     inside(x, z, m = 0, all = false) { for (const R of this.rects) { if (!all && R.corr && R.locked) continue; if (x >= R.x0 + m && x <= R.x1 - m && z >= R.z0 + (R.corr ? 0 : m) && z <= R.z1 - (R.corr ? 0 : m)) return true; } return false; },
     blocked(x, z) { return !this.inside(x, z, 0, true); },
-    camBlocked(p) { return !this.inside(p.x, p.z, 0.4, false) || p.y < 0.4; },
+    camBlocked(p) { return p.y < 0.4 || (p.y < WALL_H + 0.6 && !this.inside(p.x, p.z, 0.4, false)); },
     resolve(pos, r) {
       if (!this.inside(pos.x, pos.z, r)) {
         let bx = pos.x, bz = pos.z, bd = 1e9;
@@ -118,9 +122,9 @@ export function buildShrine(def, opt = {}) {
     floor(room.x0, room.x1, room.z0, room.z1);
     box(wallMat, 1, WALL_H, d + 2, room.x0 - 0.5, WALL_H / 2, room.cz); box(wallMat, 1, WALL_H, d + 2, room.x1 + 0.5, WALL_H / 2, room.cz);
     box(glowMat, 0.3, 0.14, d, room.x0 - 0.1, WALL_H * 0.6, room.cz, false); box(glowMat, 0.3, 0.14, d, room.x1 + 0.1, WALL_H * 0.6, room.cz, false);
-    if (i === 0) hWall(room.x0, room.x1, room.z1 + 0.5); else { hWall(room.x0, -3, room.z1 + 0.5); hWall(3, room.x1, room.z1 + 0.5); }
+    if (i === 0) hWall(room.x0, room.x1, room.z1 + 0.5, frontH); else { hWall(room.x0, -3, room.z1 + 0.5, frontH); hWall(3, room.x1, room.z1 + 0.5, frontH); }
     if (last) hWall(room.x0, room.x1, room.z0 - 0.5); else { hWall(room.x0, -3, room.z0 - 0.5); hWall(3, room.x1, room.z0 - 0.5); }
-    if (rd.t === 'combat') for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const px = sx * w / 4, pz = room.cz + sz * d / 4; const m = new THREE.Mesh(cylGeo, wallMat); m.scale.set(2.2, WALL_H, 2.2); m.position.set(px, WALL_H / 2, pz); m.castShadow = true; group.add(m); const ring = new THREE.Mesh(cylGeo, glowMat); ring.scale.set(2.4, 0.16, 2.4); ring.position.set(px, 2.2, pz); group.add(ring); A.circles.push({ x: px, z: pz, r: 1.15 }); }
+    if (rd.t === 'combat') for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const px = sx * w / 4, pz = room.cz + sz * d / 4; const m = new THREE.Mesh(cylGeo, wallMat); m.scale.set(2.2, pillarH, 2.2); m.position.set(px, pillarH / 2, pz); m.castShadow = true; group.add(m); const ring = new THREE.Mesh(cylGeo, glowMat); ring.scale.set(2.4, 0.16, 2.4); ring.position.set(px, 2.2, pz); group.add(ring); A.circles.push({ x: px, z: pz, r: 1.15 }); }
     if (rd.t === 'boss') { const ring = new THREE.Mesh(new THREE.RingGeometry(17.4, 18, 64).rotateX(-Math.PI / 2), glowMat); ring.position.set(0, 0.04, room.cz); group.add(ring); const r2 = new THREE.Mesh(new THREE.RingGeometry(5.7, 6, 48).rotateX(-Math.PI / 2), glowMat); r2.position.set(0, 0.04, room.cz); group.add(r2); A.bossRoom = room; }
     if (rd.t === 'gauntlet') {
       [10, 22, 34].forEach((o, k) => A.hazardDefs.push({ type: 'spin', x: 0, z: room.z1 - o, len: 5.6, rot: (k % 2 ? -1 : 1) * (1.5 + def.level * 0.02), ang: k * 1.1 }));
