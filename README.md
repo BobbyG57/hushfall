@@ -13,6 +13,14 @@ Open that link in a browser on any computer (Chrome works best), connect a
 controller or use the keyboard, and click the page once to switch sound on.
 Progress is saved in each browser separately, so every device has its own save.
 
+## Moving your save to another device
+
+Saves live in each browser, so they do not follow you automatically. To carry
+one across: choose **Transfer save** (title screen or pause menu), copy the
+transfer link, and send it to yourself. Opening that link on the other device
+offers to load the save there. You can also paste a link or code into the
+Transfer save screen on the title menu.
+
 ## Play from this folder
 
 1. Connect your Xbox controller (Bluetooth or USB).

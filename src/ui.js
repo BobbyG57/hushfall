@@ -5,13 +5,14 @@ import { audio } from './audio.js';
 import { fx } from './fx.js';
 import { EL, KITH, ARTS, SKILLS, RARITY, QUESTS, WAYSTONES, SHRINES, KTABLE, BIOME, VEIL_REQ, PASS, kithName, isEvolved, xpNext, kithXpNext, bladeCost, vitCost, flaskCost, MAX_BLADE, MAX_VIT, MAX_FLASK, STARTERS } from './data.js';
 import { partyList, activeKith, partyMax, artCooldown, kithPower, summonActive } from './kith.js';
-import { storeOpts } from './save.js';
+import { storeOpts, loadSave, storeSave, exportCode, importCode, transferLink } from './save.js';
 import { clamp } from './util.js';
 
 const $ = (id) => document.getElementById(id);
 const set = (el, html) => { if (el._h !== html) { el._h = html; el.innerHTML = html; } };
 const cls = (el, name, on) => { const k = '_c' + name; if (el[k] === undefined) el[k] = el.classList.contains(name); if (el[k] !== !!on) { el[k] = !!on; el.classList.toggle(name, !!on); } };
 const pill = (el) => `<span class="pill" style="background:${EL[el].css}">${EL[el].glyph} ${EL[el].name}</span>`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = (s) => `${Math.floor(s / 3600)}h ${String(Math.floor(s / 60) % 60).padStart(2, '0')}m`;
 
 export const ui = {
@@ -29,6 +30,7 @@ export const ui = {
       else if (mi) { top.idx = +mi.dataset.i; this.activate(); }
     };
     this.el.menu.addEventListener('click', click); this.el.tmenu.addEventListener('click', click);
+    this.el.menu.addEventListener('input', (e) => { if (e.target.id === 'xfer-in') this.xferText = e.target.value; });
   },
 
   // ---------------------------------------------------------------- small helpers
@@ -97,8 +99,38 @@ export const ui = {
     this.openMenu({ container: 'tmenu', noCancel: true, items: () => [
       ...(hasSave ? [{ label: 'Continue', act: () => { this.closeMenu(true); G.game.start(false); } }] : []),
       { label: 'New Game', act: () => { if (hasSave) this.confirm('Start over? Your saved journey will be erased.', () => { this.closeMenu(true); G.game.start(true); }, 'Erase and begin'); else { this.closeMenu(true); G.game.start(true); } } },
+      { label: 'Transfer save', act: () => { this.transferMenu(true); } },
       { label: 'Controls', act: () => this.openMenu({ title: 'Controls', items: () => [], side: () => this.controlsHtml() }) },
     ] });
+  },
+  // ---------------------------------------------------------------- moving a save between devices
+  saveSummary(s) { return `Level ${s.level}, ${s.kith.length} Kith, ${fmtTime(s.playtime)} played`; },
+  async transferMenu(atTitle) {
+    const cur = atTitle ? loadSave() : G.save; let link = '';
+    if (cur) { try { link = transferLink(await exportCode(cur)); } catch (e) { link = ''; } }
+    this.xferText = '';
+    const select = () => setTimeout(() => { const t = $('xfer-out'); if (t) { t.focus(); t.select(); } }, 40);
+    const copy = () => {
+      const manual = () => { select(); this.toast('Press Cmd+C (or Ctrl+C) to copy the selected link.', '', 4.5); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(() => this.toast('Transfer link copied. Send it to your other device.', 'gold', 4.5), manual); else manual();
+    };
+    const load = () => { importCode(this.xferText).then((s) => this.offerImport(s), (e) => { audio.sfx('deny'); this.toast(esc(e && e.message ? e.message : 'That save could not be read.'), '', 4.5); }); };
+    this.openMenu({ title: 'Move your save between devices', items: () => [
+      { label: 'Copy transfer link', disabled: !link, act: copy },
+      ...(atTitle ? [{ label: 'Load pasted save', act: load }] : []),
+      { label: 'Back', act: () => this.closeMenu() },
+    ], side: () => (link
+      ? `<p><b>From this device.</b> ${this.saveSummary(cur)}. Copy this link and send it to yourself (Messages, email, a note). Opening it on another device offers to load this save there.</p><textarea id="xfer-out" class="xfer" rows="4" readonly>${esc(link)}</textarea>`
+      : '<p>There is no save on this device yet.</p>')
+      + (atTitle
+        ? `<p style="margin-top:12px"><b>To this device.</b> Open a transfer link in this browser, or paste a link or code here and choose Load pasted save. It replaces the save on this device.</p><textarea id="xfer-in" class="xfer" rows="3" placeholder="Paste a transfer link or code">${esc(this.xferText || '')}</textarea>`
+        : '<p style="margin-top:12px;color:var(--dim)">To load a save onto this device, use Transfer save on the title screen.</p>') });
+  },
+  offerImport(s) {
+    const cur = loadSave();
+    this.confirm(`Load this save? ${this.saveSummary(s)}.` + (cur ? ` It replaces the one on this device (${this.saveSummary(cur)}).` : ''), () => {
+      storeSave(s); audio.sfx('bound'); this.toast('Save loaded. Choose Continue to play.', 'gold', 4.5); this.titleMenu(true);
+    }, 'Load it');
   },
   controlsHtml() {
     const rows = [['Move / Camera', 'Left stick / Right stick', 'WASD / Mouse or Arrows'], ['Jump, interact', 'A', 'Space'], ['Dodge', 'B', 'Shift'], ['Light attack', 'X', 'J or Left click'], ['Heavy attack (hold to charge)', 'Y', 'K or Right click'], ['Guard, tap to parry', 'LB', 'Q'], ['Kith Bond Art', 'RB', 'E'], ['Lock on', 'LT', 'Tab or C'], ['Bond Rite / Unison Burst', 'RT', 'R'], ['Drink Dewdrop', 'D-pad Up', 'F'], ['Swap Kith', 'D-pad Left / Right', 'Z / X'], ['Menu', 'Menu button', 'Esc or P'], ['Map', 'View button', 'M']];
@@ -133,6 +165,7 @@ export const ui = {
       { name: 'Status', title: 'Wren, Blade of the Kith', items: () => [
         { label: 'Resume', act: () => this.closeMenu(true) },
         { label: 'Save game', act: () => { G.game.save(); this.toast('Game saved.'); } },
+        { label: 'Transfer save', act: () => { G.game.save(); this.transferMenu(false); } },
         { label: 'Camera: ' + (G.opts.invertY ? 'Inverted Y' : 'Normal Y'), act: () => { G.opts.invertY = !G.opts.invertY; storeOpts(G.opts); } },
         { label: 'Volume: ' + Math.round(G.opts.volume * 100) + '%', act: () => { let v = G.opts.volume + 0.2; if (v > 1.01) v = 0; audio.setVolume(Math.round(v * 10) / 10); storeOpts(G.opts); } },
         { label: 'Graphics: ' + (G.opts.quality ? 'High' : 'Fast'), act: () => { G.opts.quality = G.opts.quality ? 0 : 1; storeOpts(G.opts); G.game.applyQuality(); } },

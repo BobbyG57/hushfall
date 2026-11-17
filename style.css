@@ -103,3 +103,10 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 /* bond rite */
 #bindui{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(6,4,14,.55)}
 #bindtxt{font:600 20px var(--serif);letter-spacing:.08em;margin-top:6px;text-shadow:0 2px 6px #000;text-align:center}
+
+/* save transfer */
+.xfer{width:100%;box-sizing:border-box;resize:none;background:rgba(8,6,18,.8);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:12px/1.4 ui-monospace,Menlo,monospace;word-break:break-all;user-select:text;-webkit-user-select:text}
+.xfer:focus{outline:none;border-color:var(--gold)}
+
+/* layering: windows sit above the title screen, toasts above windows, the fade above everything */
+#menu{z-index:20}#toasts{z-index:30}#fade{z-index:50}#err{z-index:60}

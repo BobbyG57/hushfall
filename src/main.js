@@ -10,7 +10,7 @@ import { buildShrine } from './shrine.js';
 import { Player } from './player.js';
 import { updateCombat, clearCombat, dropMotes, after } from './combat.js';
 import * as K from './kith.js';
-import { newSave, loadSave, storeSave, wipeSave, loadOpts } from './save.js';
+import { newSave, loadSave, storeSave, wipeSave, loadOpts, importCode } from './save.js';
 import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
 import { clamp, damp, lerp, smooth, angLerp, angDiff, rand, pick, weighted } from './util.js';
 
@@ -399,6 +399,14 @@ fx.init(scene); input.init(canvas); ui.init();
 G.save = loadSave(); const hadSave = !!G.save; if (!G.save) G.save = newSave();
 world.build(); scene.add(world.group); G.area = world;
 G.atTitle = true; ui.titleMenu(hadSave); audio.setMood('title');
+// a transfer link (...#save=CODE) offers to load that save on this device
+function checkTransferLink() {
+  const m = location.hash.match(/^#save=([A-Za-z0-9._-]+)$/); if (!m) return;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
+  if (!G.atTitle) { ui.toast('Quit to the title screen, then open the transfer link again to load that save.', '', 6); return; }
+  importCode(m[1]).then((s) => ui.offerImport(s), () => ui.toast('That transfer link could not be read. Copy the whole link and try again.', '', 6));
+}
+checkTransferLink(); addEventListener('hashchange', checkTransferLink);
 // handy console helpers
 window.G = G; window.step = frame;
 window.dbg = {

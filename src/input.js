@@ -27,7 +27,9 @@ export const input = {
   now: {}, prev: {}, press: {}, bufT: {}, navX: 0, navY: 0, _navDir: '', _navT: 0, anyPress: false,
 
   init(canvas) {
+    const typing = (e) => e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT');
     addEventListener('keydown', (e) => {
+      if (typing(e) && e.code !== 'Escape') return; // let text boxes (save transfer) take the keys
       if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace'].includes(e.code)) e.preventDefault();
       if (!e.repeat) { keys[e.code] = true; this.usingPad = false; this._kbAny = true; }
     });
