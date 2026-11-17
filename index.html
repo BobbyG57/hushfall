@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hushfall</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="vignette"></div>
+  <div id="hud" class="hidden">
+    <div id="hud-tl">
+      <div id="lvl">Lv 1</div>
+      <div id="bars">
+        <div class="bar hp" id="hpbar"><i></i><span></span></div>
+        <div class="bar bond" id="bondbar"><i></i></div>
+        <div class="bar xp" id="xpbar"><i></i></div>
+      </div>
+      <div id="flask"></div>
+    </div>
+    <div id="hud-tr">
+      <canvas id="mini" width="170" height="170"></canvas>
+      <div id="motes"></div>
+      <div id="quest"></div>
+    </div>
+    <div id="party"></div>
+    <div id="boss" class="hidden"><div id="bname"></div><div class="bar bossbar"><i></i></div></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="reticle" class="hidden"></div>
+    <div id="tips"></div>
+  </div>
+  <div id="ebars"></div>
+  <div id="dmg"></div>
+  <div id="banner"><div id="btitle"></div><div id="bsub"></div></div>
+  <div id="toasts"></div>
+  <div id="dialog" class="hidden"><div id="dwho"></div><div id="dtext"></div><div id="dnext"></div></div>
+  <div id="bindui" class="hidden"><canvas id="bindc" width="460" height="460"></canvas><div id="bindtxt"></div></div>
+  <div id="menu" class="hidden"></div>
+  <div id="title">
+    <div id="tlogo">HUSHFALL</div>
+    <div id="tsub">Blade of the Kith</div>
+    <div id="tmenu"></div>
+    <div id="tfoot">Xbox controller recommended. Keyboard and mouse also work.</div>
+  </div>
+  <div id="fade"></div>
+  <div id="err"></div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
