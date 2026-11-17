@@ -5,7 +5,15 @@ combat with dodges and parries, elemental creatures (Kith) you tame and fight
 beside, an open valley with five biomes, five shrines with bosses, and an
 endless Abyss for when the story is done.
 
-## How to play
+## Play online
+
+**https://bobbyg57.github.io/hushfall/**
+
+Open that link in a browser on any computer (Chrome works best), connect a
+controller or use the keyboard, and click the page once to switch sound on.
+Progress is saved in each browser separately, so every device has its own save.
+
+## Play from this folder
 
 1. Connect your Xbox controller (Bluetooth or USB).
 2. Double-click **Play Hushfall.command**. It opens the game in your browser.
