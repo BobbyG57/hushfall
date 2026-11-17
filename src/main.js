@@ -207,7 +207,9 @@ const game = {
   tip(id) {
     const s = G.save; if (!s || s.tips[id]) return; s.tips[id] = 1; const g = (a) => input.glyph(a), pad = input.usingPad;
     const T = {
-      move: pad ? 'Move with the left stick. Look around with the right stick.' : 'Move with <span class="key">WASD</span>. Click the game to look around with the mouse.',
+      move: isClassic()
+        ? (pad ? 'Move with the left stick. Push the right stick up or down to zoom.' : 'Move with <span class="key">WASD</span>. The up and down arrow keys zoom.')
+        : (pad ? 'Move with the left stick. Look around with the right stick.' : 'Move with <span class="key">WASD</span>. Click the game to look around with the mouse.'),
       fight: `${g('light')} chains into a four-hit combo. Hold ${g('heavy')} to charge a guard-breaking thrust.`,
       dodge: `${g('dodge')} to dodge through attacks. Tap ${g('guard')} just before a blow lands to parry it.`,
       lock: `${g('lock')} locks on to a foe. Your blade takes on your Kith's element.`,
