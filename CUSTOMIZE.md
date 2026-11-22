@@ -16,19 +16,24 @@ replaces one built-in piece.
 
 ## 2. Your own art: `assets/art.json`
 
-Put image files in the `assets/` folder and list them in `assets/art.json`.
-Anything you do not list keeps its built-in look, so you can go one character
-at a time.
+Put image files and 3D models in the `assets/` folder and list them in
+`assets/art.json`. Anything you do not list keeps its built-in look, so you can
+go one character at a time.
 
 To see a working example, add `?art=example` to the address
 (for instance `http://localhost:8765/?art=example`). That loads
 `assets/art.example.json`, which swaps in the sample hero and ground tile from
-`assets/example/`. Copy that file over `art.json` as a starting point.
+`assets/example/`. Copy the parts you want from it into `art.json` (which
+already lists the hero model, see 3D models below).
 
 ```json
 {
   "title": "MY GAME",
   "subtitle": "A subtitle",
+  "models": {
+    "player":         { "file": "models/hero.glb", "height": 2 },
+    "kith.cinderpup": { "file": "models/cinderpup.glb" }
+  },
   "sprites": {
     "player":         { "file": "hero.png", "frames": 4, "rows": 4, "height": 2.1 },
     "kith.mossling":  { "file": "mossling.png", "frames": 2, "rows": 1, "faces": "right" },
@@ -81,6 +86,79 @@ Sprites get a soft shadow automatically, flash when hit, and tip over when
 defeated. The hero's sword swing and trail are drawn for you, so the hero sheet
 only needs walking frames.
 
+### 3D models (for example from Blender)
+
+A model replaces a character's built-in look the same way a sprite does, using
+the same names (`player`, `kith.mossling`, `enemy.husk`, `boss.ghorn`,
+`npc.elder` and so on). If a character has both, the model wins.
+
+The hero you play is one: `assets/art.json` lists `models/hero.glb`, made in
+Blender. Its source is `blender/hero.blend`: open it in Blender to see how it
+is put together, or change it and export again. To compare with the original
+blocky hero, add `?art=none` to the address (`http://localhost:8765/?art=none`),
+which skips `art.json` entirely. To go back to it for good, delete the
+`"models"` part of `art.json`.
+
+| Setting | What it does |
+| --- | --- |
+| `file` | Model path inside `assets/`, a `.glb` file (or `.gltf`). |
+| `height` | Height in the world. The model is scaled to fit, with its feet on the ground, so the size you build it at does not matter. The hero is about 2. |
+| `hover` | Lifts the model off the ground, for flyers. |
+| `turn` | Degrees to turn the model if it does not face forward in the game. |
+| `speed` | Speeds up (above 1) or slows down (below 1) all its animations. |
+| `clips` | Picks animations by name for particular moves, for example `{ "h1": "BigSwing" }`. The move names are in the first column of the table below (`idle`, `run`, `air`, `h1`, `h2`, `v`, `spin`, `thrust`, `atk`, `charge`, `cast`, `guard`, `dodge`, `hurt`, `dead`, `drink`). |
+| `blade` | `false` hides the floating sword a hero model gets when it has no sword of its own. |
+| `tint` | `false` stops enemies from being tinted by their element. |
+
+**Making one in Blender**
+
+1. Build the character facing you in Front view (numpad 1), standing on the
+   ground at the centre of the scene.
+2. Colour it with materials. Plain colours and image textures both carry over;
+   the game draws them in its own matte style so they match the world.
+3. To animate it, rig it with an armature and make one action per move, named
+   as in the table below. Anything without an animation gets a simple lean,
+   bob or fall instead, so a model with no animations at all still works.
+4. Choose File, Export, glTF 2.0. Set Format to **glTF Binary (.glb)** and,
+   under Animation, set Mode to **Actions**. Save it in `assets/models/`.
+5. Add it under `"models"` in `assets/art.json` and refresh the game.
+
+**Animation names the game looks for** (capitals and spaces do not matter):
+
+| Move | Names, first match wins |
+| --- | --- |
+| `idle`: standing still (loops) | Idle, Stand |
+| `run`: moving (loops, faster at full speed) | Run, Walk |
+| `air`: jumping or falling | Jump, Fall |
+| `h1`, `h2`, `v`: light combo hits 1, 2 and 3 | Slash; Slash2; Overhead (each falls back to Attack) |
+| `spin`, `thrust`: the finisher and the heavy attack | Spin; Thrust (fall back to Attack) |
+| `charge`: holding the heavy attack | Charge |
+| `guard`, `dodge` | Guard or Block; Dodge, Roll or Dash |
+| `hurt`, `dead` | Hurt or Hit; Die or Death |
+| `drink`: drinking a Dewdrop | Drink |
+| `atk`, `cast`: enemy and Kith attacks and spells | Attack or Bite; Cast or Roar |
+
+Attack animations play in step with the swing itself: the first frame is the
+wind-up and the last frame is the follow-through. Other moves play once and
+hold their last frame until the move ends. Idle and Run loop.
+
+**The hero's sword.** Give the blade its own material named `Blade` and it
+glows with the element of your Kith, as the built-in sword does. Add two
+empties named `BladeBase` and `BladeTip` at the two ends of the blade, parented
+to the sword (or the hand bone), and the sword trail follows them. Without
+those empties the hero gets the same floating sword that sprites use.
+
+**The sample hero is built by a script.** `blender/make_hero.py` makes the
+whole model, rig and animations, then writes `blender/hero.blend` and
+`assets/models/hero.glb`. To rebuild it (Blender does not need to be open):
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python blender/make_hero.py
+```
+
+Running the script replaces `hero.blend`, so once you start changing the model
+by hand in Blender, export from Blender instead of running the script again.
+
 ### Ground and dungeon floor
 
 `ground` covers the whole outdoor world and `floor` covers shrine rooms. Use an
@@ -117,10 +195,10 @@ Elsewhere:
 
 ## 4. Not swappable yet
 
-These need a little code first, so ask for them when you want them: 3D model
-files (for example `.glb` from Blender), your own trees, rocks and buildings,
-a different ground texture for each area, music or sound files, and creature
-portraits in the menus.
+These need a little code first, so ask for them when you want them: your own
+trees, rocks and buildings (as 3D models or sprites), a different ground
+texture for each area, music or sound files, and creature portraits in the
+menus.
 
 ## 5. Seeing your changes
 

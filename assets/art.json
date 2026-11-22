@@ -1,1 +1,5 @@
-{}
+{
+  "models": {
+    "player": { "file": "models/hero.glb", "height": 2.0 }
+  }
+}

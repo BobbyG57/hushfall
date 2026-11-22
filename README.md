@@ -54,9 +54,10 @@ explore. Add `?slot=name` to the address for a second save file.
 ## Make it your own
 
 The default view is a fixed high-angle camera; the over-the-shoulder camera is
-under Menu, Status, View. To add your own sprites, ground textures, colours and
-title, and to find where names, dialogue and stats live, see
-[CUSTOMIZE.md](CUSTOMIZE.md).
+under Menu, Status, View. To add your own 3D models (for example from Blender),
+sprites, ground textures, colours and title, and to find where names, dialogue
+and stats live, see [CUSTOMIZE.md](CUSTOMIZE.md). The hero is a 3D model made
+in Blender; add `?art=none` to the address to see the original blocky hero.
 
 ## Things worth knowing
 
@@ -77,6 +78,8 @@ title, and to find where names, dialogue and stats live, see
 
 - `index.html`, `style.css`: the page and HUD styling.
 - `src/`: the game, as plain JavaScript modules (no build step).
-- `assets/`: your own art goes here (see CUSTOMIZE.md). `assets/example/` holds a sample.
-- `vendor/`: the three.js renderer (MIT licence).
+- `assets/`: your own art goes here (see CUSTOMIZE.md). `assets/models/hero.glb`
+  is the hero, and `assets/example/` holds a sample sprite.
+- `blender/`: the hero's Blender file and the script that builds it.
+- `vendor/`: the three.js renderer and its model loader (MIT licence).
 - `server.py`: a tiny local web server (localhost only).

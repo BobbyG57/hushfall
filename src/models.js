@@ -1,4 +1,5 @@
-// Every character is built from flat-shaded primitives and animated procedurally. No art assets.
+// Every built-in character is built from flat-shaded primitives and animated procedurally.
+// Custom 2D sprites and 3D models from assets/art.json replace them (see the end of this file).
 import * as THREE from 'three';
 import { EL, KITH } from './data.js';
 import { lerp, damp, angDiff } from './util.js';
@@ -313,12 +314,7 @@ function makeSpriteModel(d, o = {}) {
   M.shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false });
   const sh = new THREE.Mesh(shadowGeo, M.shadowMat); sh.scale.setScalar(Math.max(0.5, w * 0.75)); sh.position.y = 0.06; sh.renderOrder = 1; M.root.add(sh);
   M.height = h + hover; M.baseY = 0; M.hover = hover > 0;
-  if (o.blade) { // an invisible sword arm, so swings still show a blade and a trail
-    const arm = M.piv('swing', 0, h * 0.5, 0, M.root, 'YXZ');
-    M.bladeMat = new THREE.MeshLambertMaterial({ color: 0xeef4ff, flatShading: true, emissive: 0x556070 });
-    const b = new THREE.Mesh(GEO.box, M.bladeMat); b.scale.set(0.07, 0.18, 1.25); b.position.set(0, 0, 1.05); b.visible = false; arm.add(b); M.blade = b;
-    M.piv('bladeBase', 0, 0, 0.45, arm); M.piv('bladeTip', 0, 0, 1.7, arm);
-  }
+  if (o.blade) addSwingBlade(M, h);
   M.tick = function (dt) {
     if (this.flash > 0 || this._fl) { this.flash = Math.max(0, this.flash - dt * 5); this._fl = this.flash > 0; }
     mat.color.copy(this.tint).multiplyScalar(G.light || 1); if (this._fl) mat.color.lerp(_fc.copy(this.flashCol).multiplyScalar(3), this.flash * 0.8);
@@ -338,24 +334,155 @@ function animSprite(M, a, dt) {
   M.spriteMat.rotation = damp(M.spriteMat.rotation, rot, 14, dt);
   M.sprite.position.y = M.hoverY + (M.hover ? Math.sin(a.t * 2.6) * 0.12 : 0);
   if (M.xray) { M.xray.position.y = M.sprite.position.y; M.xray.material.rotation = M.spriteMat.rotation; }
-  if (M.blade) {
-    const k = Math.min(1, Math.max(0, a.ph || 0)), e = k * k * (3 - 2 * k); let vis = true, ax = 0, ay = 0;
-    switch (a.pose) {
-      case 'h1': ay = lerp(-1.5, 1.15, e); break;
-      case 'h2': ay = lerp(1.15, -1.5, e); break;
-      case 'v': ax = lerp(-1.6, 0.5, e); break;
-      case 'spin': ay = e * Math.PI * 2; break;
-      case 'thrust': ax = 0; break;
-      case 'over': ax = -1.6; break;
-      case 'charge': ay = -1.4; break;
-      case 'guard': ay = 0.9; ax = -0.9; break;
-      default: vis = false;
-    }
-    M.blade.visible = vis; M.p.swing.rotation.set(ax, ay, 0);
+  if (M.blade) animSwing(M, a);
+}
+
+// An invisible sword arm, so art without a sword of its own still shows a blade and a trail on swings.
+const newBladeMat = () => new THREE.MeshLambertMaterial({ color: 0xeef4ff, flatShading: true, emissive: 0x556070 });
+function addSwingBlade(M, h, hidden) {
+  const arm = M.piv('swing', 0, h * 0.5, 0, M.root, 'YXZ');
+  M.bladeMat ||= newBladeMat();
+  const b = new THREE.Mesh(GEO.box, M.bladeMat); b.scale.set(0.07, 0.18, 1.25); b.position.set(0, 0, 1.05); b.visible = false; arm.add(b); M.blade = b; M.bladeHidden = !!hidden;
+  M.piv('bladeBase', 0, 0, 0.45, arm); M.piv('bladeTip', 0, 0, 1.7, arm);
+}
+function animSwing(M, a) {
+  const k = Math.min(1, Math.max(0, a.ph || 0)), e = k * k * (3 - 2 * k); let vis = true, ax = 0, ay = 0;
+  switch (a.pose) {
+    case 'h1': ay = lerp(-1.5, 1.15, e); break;
+    case 'h2': ay = lerp(1.15, -1.5, e); break;
+    case 'v': ax = lerp(-1.6, 0.5, e); break;
+    case 'spin': ay = e * Math.PI * 2; break;
+    case 'thrust': ax = 0; break;
+    case 'over': ax = -1.6; break;
+    case 'charge': ay = -1.4; break;
+    case 'guard': ay = 0.9; ax = -0.9; break;
+    default: vis = false;
   }
+  M.blade.visible = vis && !M.bladeHidden; M.p.swing.rotation.set(ax, ay, 0);
+}
+
+// ---------------------------------------------------------------- custom 3D models (see CUSTOMIZE.md)
+// A character with an entry under "models" in assets/art.json is drawn with that .glb / .gltf file,
+// scaled to its height with its feet on the ground. Animations are picked by name for each game pose;
+// anything the file has no animation for falls back to a simple lean, bob or tip-over.
+const POSE_CLIPS = {
+  idle: ['idle', 'stand', 'breathe'], run: ['run', 'walk', 'move'], air: ['jump', 'fall', 'air'],
+  h1: ['slash', 'attack'], h2: ['slash2', 'backslash', 'slash', 'attack'], v: ['overhead', 'chop', 'attack'],
+  spin: ['spin', 'attack'], thrust: ['thrust', 'stab', 'attack'], atk: ['attack', 'bite', 'slash'],
+  over: ['overhead', 'charge', 'attack'], charge: ['charge', 'windup'], cast: ['cast', 'roar', 'attack'],
+  guard: ['guard', 'block'], dodge: ['dodge', 'roll', 'dash'], hurt: ['hurt', 'hit'], dead: ['die', 'death', 'dead'], drink: ['drink', 'use'],
+};
+const SCRUB = { h1: 1, h2: 1, v: 1, spin: 1, thrust: 1, atk: 1 };   // played in step with the swing itself
+const clipKey = (n) => n.split('|').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
+const _tc = new THREE.Color();
+function makeGlbModel(d, o = {}) {
+  const M = new Model('glb'); M.def = d;
+  const h = d.height || o.height || 1.8, hover = d.hover || o.hover || 0;
+  const body = M.piv('body', 0, 0, 0), fit = new THREE.Group(), obj = ART.cloneModel(d.scene), s = h / Math.max(0.01, d.size.y);
+  fit.scale.setScalar(s); fit.rotation.y = d.turn; fit.position.y = hover - d.min.y * s; fit.add(obj); body.add(fit);
+  M.height = h + hover; M.baseY = hover; M.hover = hover > 0;
+  if (o.blade) M.bladeMat = newBladeMat();
+  // Materials become the game's matte style (keeping colours and textures) so models sit in the world
+  // and flash when hit. A material whose name starts with "Blade" glows with the hero's element.
+  const conv = new Map(), tint = d.tint && o.tint !== undefined ? _tc.set(o.tint) : null;
+  const one = (m) => {
+    if (conv.has(m)) return conv.get(m);
+    let r;
+    if (o.blade && /^blade/i.test(m.name || '')) r = M.bladeMat;
+    else {
+      r = new THREE.MeshLambertMaterial({ name: m.name, map: m.map || null, emissiveMap: m.emissiveMap || null, alphaMap: m.alphaMap || null, normalMap: m.normalMap || null, aoMap: m.aoMap || null,
+        vertexColors: !!m.vertexColors, transparent: !!m.transparent, opacity: m.opacity ?? 1, alphaTest: m.alphaTest || 0, side: m.side ?? THREE.FrontSide, flatShading: !!m.flatShading });
+      if (m.color) r.color.copy(m.color); if (m.emissive) r.emissive.copy(m.emissive); r.emissiveIntensity = m.emissiveIntensity ?? 1;
+      if (m.normalMap && m.normalScale) r.normalScale.copy(m.normalScale);
+      if (tint) r.color.lerp(tint, 0.15);
+      r.userData.em = r.emissive.clone(); M.mats.push(r);
+    }
+    conv.set(m, r); return r;
+  };
+  obj.traverse((n) => {
+    if (!n.isMesh) return;
+    n.castShadow = true; if (n.isSkinnedMesh) n.frustumCulled = false;
+    n.material = Array.isArray(n.material) ? n.material.map(one) : one(n.material);
+  });
+  // Sword trail: empties named BladeBase and BladeTip (parented to the hand) mark the model's own
+  // sword. Without them the hero gets the same swinging blade that sprites use.
+  if (o.blade) {
+    const base = obj.getObjectByName('BladeBase'), tip = obj.getObjectByName('BladeTip');
+    if (base && tip) { M.p.bladeBase = base; M.p.bladeTip = tip; } else addSwingBlade(M, h, !d.blade);
+  }
+  if (d.anims.length) {
+    const mixer = M.mixer = new THREE.AnimationMixer(obj), byKey = {}, acts = new Map();
+    for (const c of d.anims) byKey[clipKey(c.name)] ??= c;
+    const find = (pose) => {
+      const want = d.clips[pose]; if (want) { const c = d.anims.find((x) => x.name === want) || byKey[clipKey(want)]; if (c) return c; }
+      for (const n of POSE_CLIPS[pose]) if (byKey[n]) return byKey[n];
+      return null;
+    };
+    M.clipFor = {}; M.w = new Map();
+    for (const pose of Object.keys(POSE_CLIPS)) {
+      const c = find(pose); if (!c) continue;
+      let act = acts.get(c);
+      if (!act) {
+        act = mixer.clipAction(c); acts.set(c, act);
+        if (pose === 'idle' || pose === 'run') act.play(); else { act.setLoop(THREE.LoopOnce, 1); act.clampWhenFinished = true; }
+        act.setEffectiveWeight(0);
+      }
+      M.clipFor[pose] = act;
+    }
+    M.acts = [...acts.values()];
+  }
+  M.dispose = function () { if (this.mixer) { this.mixer.stopAllAction(); this.mixer.uncacheRoot(obj); } for (const m of this.mats) m.dispose(); if (this.bladeMat) this.bladeMat.dispose(); };
+  return M;
+}
+function animGlb(M, a, dt) {
+  const d = M.def, pose = a.pose || null, run = a.run || 0, t = a.t, k = Math.min(1, Math.max(0, a.ph || 0));
+  M.runS = damp(M.runS || 0, run, 10, dt);
+  let act = null;
+  if (M.mixer) {
+    const C = M.clipFor; act = (pose && C[pose]) || (!pose && a.air && C.air) || null;
+    if (act) {
+      const hold = SCRUB[pose] ? k : pose === 'over' && act === C.v ? 0 : -1;   // 'over' holds the raised sword
+      if (hold >= 0) { if (!act.isScheduled()) act.play(); act.paused = true; act.enabled = true; act.time = hold * act.getClip().duration; }
+      else if (act !== M.cur || M.curPose !== pose) { act.reset(); act.timeScale = d.speed; act.play(); }
+    }
+    M.cur = act; M.curPose = pose;
+    // blend weights: the pose's own clip, or idle and run mixed by speed; each fades toward its target
+    const r = C.run ? M.runS : 0, rate = act && SCRUB[pose] ? 30 : 12; let sum = 0;
+    for (const x of M.acts) {
+      let target = 0;
+      if (act) target = x === act ? 1 : 0;
+      else { if (x === C.idle) target += 1 - r; if (x === C.run) target += r; }
+      const w = damp(M.w.get(x) || 0, target, rate, dt); M.w.set(x, w); sum += w;
+    }
+    for (const x of M.acts) { const w = (M.w.get(x) || 0) / Math.max(1, sum); x.enabled = w > 0.002 || x === act; x.setEffectiveWeight(w); }
+    if (C.idle) C.idle.timeScale = d.speed;
+    if (C.run) C.run.timeScale = d.speed * (0.45 + 0.65 * M.runS);
+    M.mixer.update(dt);
+  }
+  // simple motion for whatever the file has no animation for
+  const own = !!act || (!pose && M.mixer && (M.runS > 0.15 ? M.clipFor.run : M.clipFor.idle));
+  let lean = 0, y = 0, spin = 0;
+  if (!own) {
+    const e = k * k * (3 - 2 * k);
+    switch (pose) {
+      case 'dead': lean = -1.45; y = -M.baseY * 0.8; break;
+      case 'hurt': lean = -0.35; break;
+      case 'dodge': lean = 0.5; y = -0.1; break;
+      case 'spin': spin = e * Math.PI * 2; lean = 0.15; break;
+      case 'h1': case 'h2': case 'v': case 'thrust': case 'atk': lean = Math.sin(k * Math.PI) * 0.35; break;
+      case 'charge': case 'over': lean = -0.25; break;
+      case 'cast': lean = -0.3; y = 0.2; break;
+      case 'guard': lean = 0.12; break;
+      default: lean = 0.12 * M.runS; y = Math.abs(Math.sin(t * 11)) * 0.1 * M.runS + Math.sin(t * 2.2) * 0.015 * (1 - M.runS);
+    }
+  }
+  if (M.hover && pose !== 'dead') y += Math.sin(t * 2.6) * 0.12;
+  const p = M.p.body; p.rotation.x = damp(p.rotation.x, lean, 14, dt); p.rotation.y = spin; p.position.y = damp(p.position.y, y, 14, dt);
+  if (M.blade) animSwing(M, a);
 }
 const SPRITE_H = { husk: 1.9, skitter: 0.8, spitter: 1.7, brute: 3.1, warder: 2.2, wraith: 2.1, ghorn: 5, cindermaw: 4, brine: 4, skarn: 3, king: 4.4 };
-function spriteFor(key, o) { const d = ART.sprites[key]; return d ? makeSpriteModel(d, o) : null; }
+// A model listed in art.json wins over a sprite, which wins over the built-in blocky model.
+function spriteFor(key, o) { const g = ART.models[key]; if (g) return makeGlbModel(g, o); const d = ART.sprites[key]; return d ? makeSpriteModel(d, o) : null; }
 
 // A flat silhouette that shows wherever the hero is hidden behind a tree, wall or creature.
 export function addXray(M) {
@@ -365,12 +492,18 @@ export function addXray(M) {
   }
   const mat = new THREE.MeshBasicMaterial({ color: 0x8fd8ff, depthFunc: THREE.GreaterDepth, depthWrite: false, fog: false });
   const list = []; M.root.traverse((o) => { if (o.isMesh) list.push(o); });
-  for (const o of list) { o.renderOrder = 2; const x = new THREE.Mesh(o.geometry, mat); x.renderOrder = 1; o.add(x); }
+  for (const o of list) {
+    o.renderOrder = 2;
+    const x = o.isSkinnedMesh ? new THREE.SkinnedMesh(o.geometry, mat) : new THREE.Mesh(o.geometry, mat);
+    if (o.isSkinnedMesh) { x.bind(o.skeleton, o.bindMatrix); x.frustumCulled = false; }
+    x.renderOrder = 1; o.add(x);
+  }
 }
 
 export function animate(M, a, dt) {
   switch (M.kind) {
     case 'sprite': animSprite(M, a, dt); break;
+    case 'glb': animGlb(M, a, dt); break;
     case 'humanoid': animHumanoid(M, a, dt); break;
     case 'creature': animCreature(M, a, dt); break;
     case 'spitter': animSpitter(M, a, dt); break;
