@@ -14,6 +14,7 @@ import { newSave, loadSave, storeSave, wipeSave, loadOpts, importCode } from './
 import { ART, loadArt } from './art.js';
 import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, CHAT, DOORS, FREED, OPENS, MEMORIES, LULLABY, memoryLines, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
 import { trials } from './trials.js';
+import { rival } from './rival.js';
 import { clamp, damp, lerp, smooth, angLerp, angDiff, rand, pick, weighted } from './util.js';
 
 // ---------------------------------------------------------------- renderer + scene
@@ -311,6 +312,8 @@ const game = {
   },
 
   enterShrine(id) {
+    const guard = rival.guarding(id);   // Sable stands in front of the Hollow Court until the last duel
+    if (guard) { if (rival.cur) ui.toast('Sable is in the way.'); else rival.start(guard); return; }
     const def = SHRINES[id], p = G.player, door = 'door' + id;
     if (DOORS[id] && !G.save.tips[door]) { G.save.tips[door] = 1; ui.say([['', DOORS[id]]], () => game.enterShrine(id)); return; }
     transition(() => {
@@ -379,7 +382,7 @@ const game = {
     });
   },
 };
-G.game = game; G.ui = ui; G.world = world; G.trials = trials;
+G.game = game; G.ui = ui; G.world = world; G.trials = trials; G.rival = rival;
 
 function interact() {
   const p = G.player; if (p.dead) { ui.setPrompt(null); return; }
@@ -419,7 +422,7 @@ function frame(now) {
           p.update(pdt); if (G.comp) G.comp.update(pdt);
           for (const e of G.enemies) e.update(dt);
           for (let i = G.enemies.length - 1; i >= 0; i--) if (G.enemies[i].gone) G.enemies.splice(i, 1);
-          updateCombat(dt); G.area.update(dt, G.time); updateLock(raw); trials.update();
+          updateCombat(dt); G.area.update(dt, G.time); updateLock(raw); trials.update(); rival.update();
           for (const id in G.artCd) if (G.artCd[id] > 0) G.artCd[id] -= pdt;
           if (G.combatT > 0) { G.combatT -= raw; game.tip('fight'); if (G.comp && s.tips.fight && s.playtime > 30) game.tip('art'); }
           if (G.lastHitT > 0) { G.lastHitT -= raw; if (G.lastHitT <= 0) G.lastHit = null; }

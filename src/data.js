@@ -85,6 +85,7 @@ export const BOSS = {
   brine: { name: 'Maressa, the Drowned Cantor', el: 'tide', hp: 350, dmg: 14, speed: 4, radius: 1.1, poise: 160 },
   skarn: { name: 'Skarn, Stormcaller', el: 'storm', hp: 380, dmg: 15, speed: 5.5, radius: 0.9, poise: 170 },
   king: { name: 'The Hollow King', el: 'gloam', hp: 520, dmg: 15, speed: 4.4, radius: 1.3, poise: 240 },
+  sable: { name: 'Sable', el: 'gloam', hp: 260, dmg: 11, speed: 5.4, radius: 0.7, poise: 150 },   // the rival (RIVAL below)
 };
 
 export const SKILLS = [
@@ -422,6 +423,39 @@ export function objectiveFor(s) {
   return q;
 }
 
+// Sable, the rival (STORY.md, build step 6; run by src/rival.js). Three duels between chapters. Sable
+// never dies: at `yieldAt` health Sable stops, talks, and leaves. `after` is the shrine that must be
+// awake first; the duel starts when you come near (x, z). The last one also guards the Hollow Court.
+export const RIVAL = [
+  { id: 'rivalpass', after: 'roots', x: 110, z: -2, level: 6, yieldAt: 0.5, tier: 1, moth: false,
+    intro: [['', 'Someone is sitting on the rocks by the pass, sharpening a dark blade. They look up as you come near.'],
+      ['Sable', 'So you are the one who woke the Rootwarden. He was happy asleep, you know. They all were.'],
+      ['Sable', 'I am Sable. I have walked this valley alone since before you could hold a sword. Let us see if you can hold one now.']],
+    outro: [['Sable', 'Enough. You are better than you look.'],
+      ['Sable', 'Do you know what the Hush is, foundling? It is quiet. Nobody misses anybody in the quiet. Think about that before you wake the next one.'],
+      ['', 'Sable steps back into the shadow of the rocks and is gone. Something glints where Sable stood: a pouch of Motes.']],
+    reward: { motes: 150 } },
+  { id: 'rivalstair', after: 'tides', x: -4, z: -104, level: 14, yieldAt: 0.3, tier: 2, moth: true,
+    intro: [['', 'A Duskmoth flutters down from the north stair, and Sable follows it.'],
+      ['Sable', 'You made the Cantor sing. I heard it all the way up the mountain.'],
+      ['Sable', 'For one moment I remembered my mother\'s voice. Then it was gone again. That is what you are bringing back: the missing.'],
+      ['Sable', 'Wisp. With me.']],
+    outro: [['Sable', 'Why does it not hurt you? Every song you wake, and you just keep walking.'],
+      ['Sable', 'Go on, then. Climb your stair. I will be waiting at the end of all this.'],
+      ['', 'Sable and the moth vanish into the dusk, leaving a Skill Sigil glowing in the grass.']],
+    reward: { sigils: 1 } },
+  { id: 'rivalgate', after: 'gales', x: -248, z: 64, level: 22, yieldAt: 0.1, tier: 3, moth: true, guards: 'hollow',
+    intro: [['', 'Sable stands before the doors of the Hollow Court, blade drawn. The Duskmoth hangs in the air, still as a held breath.'],
+      ['Sable', 'I got here first. I was going to go in and ask him to make it quieter. To make it so I could not remember them at all.'],
+      ['Sable', 'And then I thought of you, stubborn foundling, waking every shrine as if it cost you nothing. So. One more time.']],
+    outro: [['', 'Sable\'s blade drops to the ground.'],
+      ['Sable', 'I miss them. My mother. My little brother. I miss them every single day, and I hate it.'],
+      ['Sable', 'But I do not want to forget them. I think I just wanted it to stop hurting.'],
+      ['Sable', 'Go. Wake him. If anyone can, it is you. Here: you will need these more than I will.'],
+      ['', 'Sable steps back into the dusk with Wisp on one shoulder. For the first time, Sable is smiling.']],
+    reward: { threads: 5 } },
+];
+
 // What the villagers say, chapter by chapter (indexed like G.save.quest). `first` is said once per
 // chapter; Brannoc, Pip and Oona then open their menus, and Maren repeats her `again` line.
 // A third entry on a line is a condition (LINE_COND in main.js): the line is only said when it is true.
@@ -431,7 +465,7 @@ export const CHAT = {
   elder: [
     null,
     ch(null, [maren('Northwest, past the old stones, to the Shrine of Roots. Ghorn\'s roots fear fire, if any of your Kith can burn.'), maren('When you grow stronger, open the menu and spend your Skill Sigils. A blade can learn new songs too.')]),
-    ch([maren('Lanterns have lit themselves on the Tree. Ghorn is free, then.'), maren('He said the Tree remembers me? That old root. I would rather it forgot a few things.'), maren('The east pass is open. Beyond it lie Emberridge and the Shrine of Cinders. Brannoc knows that mountain better than anyone, though he will not say so.')],
+    ch([maren('Lanterns have lit themselves on the Tree. Ghorn is free, then.'), maren('He said the Tree remembers me? That old root. I would rather it forgot a few things.'), maren('The east pass is open. Beyond it lie Emberridge and the Shrine of Cinders. Brannoc knows that mountain better than anyone, though he will not say so.'), maren('And Pip says a young stranger with a dark blade has been sitting by the pass for days. Keep your wits about you.')],
       [maren('East, to Emberridge. Ask Brannoc about the mountain, and be patient if he will not answer.')]),
     ch([maren('More of the lanterns are burning now. And Brannoc is singing at his forge. Badly, but singing.'), maren('The south pass leads to Mirrormere. Maressa sleeps beneath the mere: the Cantor. Hers was the loveliest voice in Vael.'), maren('Still water fears the storm. Something that crackles would serve you well there.')],
       [maren('South, to Mirrormere. Bring something that crackles.')]),

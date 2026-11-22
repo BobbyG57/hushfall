@@ -34,7 +34,7 @@ export class Enemy {
     G.scene.add(model.root); model.root.scale.setScalar(0.001);
   }
   place(x, z) { this.pos.set(x, 0, z); G.area.resolve(this.pos, this.radius, this); this.pos.y = G.area.heightAt(this.pos.x, this.pos.z); this.home = { x: this.pos.x, z: this.pos.z }; this.model.root.position.copy(this.pos); }
-  get bindable() { return !!this.wild && !this.dead && this.hp / this.maxHp <= 0.5; }
+  get bindable() { return !!this.wild && !this.tame && !this.dead && this.hp / this.maxHp <= 0.5; }   // tame: Sable's own Kith
   remove() { this.gone = true; this.releaseToken(); G.scene.remove(this.model.root); this.model.dispose(); if (G.lock === this) G.lock = null; if (G.boss === this) G.boss = null; }
   alert() { if (!this.aggro) { this.aggro = true; this.passive = false; G.combatT = Math.max(G.combatT, 3); if (!this.wild && !this.boss && !this.minion) G.game.tip(this.type); } }
 
@@ -75,7 +75,7 @@ export class Enemy {
   }
 
   hurt(dmg, o = {}) {
-    if (this.dead || this.spawnT > 0 || this.invuln) return false;
+    if (this.dead || this.spawnT > 0 || this.invuln || this.yielded) return false;
     let mult = elMult(o.el, this.el, o.player && G.save.skills.edge);
     if (this.status.weak > 0) mult *= 1.4;
     if (o.kith && G.run && G.run.boons.kindred) mult *= 1 + 0.4 * G.run.boons.kindred;
@@ -101,6 +101,8 @@ export class Enemy {
         else this.stagger(this.poiseMax > 30 ? 0.9 : 0.45);
       }
     }
+    // Sable (the rival) never dies: at yieldAt health the fight stops and rival.js takes over
+    if (this.yieldAt && this.hp <= this.maxHp * this.yieldAt) { this.hp = Math.ceil(this.maxHp * this.yieldAt); this.yielded = true; this.endScript(); this.pose(null); if (this.onYield) this.onYield(); return true; }
     if (this.hp <= 0) this.die();
     return true;
   }
@@ -267,7 +269,7 @@ export class Enemy {
 
   // ---------------------------------------------------------------- boss brain + patterns
   bossThink(dt) {
-    const p = G.player; if (p.dead) return;
+    const p = G.player; if (p.dead || this.yielded) return;
     if (!this.aggro) { this.alert(); }
     G.combatT = 3; this.cd -= dt; this.faceP(dt, 5);
     const dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z, d = Math.hypot(dx, dz), nx = dx / (d || 1), nz = dz / (d || 1), reach = d - this.radius - p.radius;
@@ -286,6 +288,10 @@ export class Enemy {
     if (id === 'ghorn') { o = [['sweep', reach < 6 ? 3 : 0.5], ['slam', 2], ['rain', reach > 7 ? 3 : 1]]; if (P > 1) { o.push(['shock', 2]); if (!this.summoned) o = [['summonS', 1]]; } }
     else if (id === 'cindermaw') { o = [['charge', reach > 8 ? 4 : 1.5], ['fan', reach < 13 ? 3 : 1], ['meteor', 2], ['sweep', reach < 5 ? 2.5 : 0]]; if (P > 1) o.push(['slamwave', 2.5], ['charge3', 2]); }
     else if (id === 'brine') { o = [['ring', 3], ['volley', 3], ['wall', 2.5], ['pull', reach < 14 ? 2.5 : 1], ['escape', reach < 4 ? 6 : 0]]; if (P > 1) o.push(['ring3', 3], ['wall2', 3], ['rain', 2]); }
+    else if (id === 'sable') {   // the rival fights like a swordsman, and harder each duel (tier 1 to 3)
+      const T = this.tier || 1; o = [['sCombo', reach < 6 ? 3 : 0.6], ['sBlink', T > 1 ? 2.2 : 1], ['sDash', reach > 5 ? 2.2 : 0.6]];
+      if (T > 1) o.push(['sBolts', 1.6]); if (T > 2 || P > 1) o.push(['sRain', 1.3]);
+    }
     else if (id === 'skarn') { o = [['blink', 3.5], ['charge', reach > 5 ? 2 : 0.5], ['rain', 2], ['sweep', reach < 5 ? 2.5 : 0]]; if (P > 1) o.push(['beam', 3], ['blink5', 3], ['shock', 1.5]); }
     else { o = [['sweep3', reach < 7 ? 3.5 : 1], ['slamwave', 2.5], ['ring', 2], ['blink', 2]]; if (P > 1) { o.push(['rain', 2.5], ['volley', 2]); if (!this.summoned) o.push(['summonW', 2]); } if (P > 2) o.push(['beam', 3], ['shock3', 3], ['blink5', 2.5]); }
     o = o.filter((e) => e[1] > 0); if (o.length > 1) o = o.filter((e) => e[0] !== this.lastPat);
@@ -315,6 +321,11 @@ export class Enemy {
       case 'shock3': yield* this.pShock(3); break;
       case 'summonS': this.summoned = true; yield* this.pSummon('skitter', 3); break;
       case 'summonW': this.summoned = true; yield* this.pSummon('wraith', 2); break;
+      case 'sCombo': yield* this.pSweep(Math.min(3, (this.tier || 1) + 1), 3.8); break;
+      case 'sBlink': yield* this.pBlink(this.tier || 1); break;
+      case 'sDash': yield* this.pCharge((this.tier || 1) > 2 ? 2 : 1); break;
+      case 'sBolts': yield* this.pVolley(2 + (this.tier || 1)); break;
+      case 'sRain': yield* this.pRain(3 + (this.tier || 1), 3, 0.3); break;
     }
     void K; this.pose(null); this.cd = P > 2 ? 0.45 : P > 1 ? 0.75 : 1.25;
   }
@@ -339,7 +350,7 @@ export class Enemy {
     this.pose('cast'); this.tele();
     for (let i = 0; i < n; i++) {
       const p = G.player, t = { x: p.pos.x + rand(-1.5, 1.5) + p.vel.x * 0.5, y: p.pos.y, z: p.pos.z + rand(-1.5, 1.5) + p.vel.z * 0.5 };
-      fx.telegraph(t, R, 0.85); after(0.85, () => { if (!this.dead) { this.boom(t, R, this.dmg * 1.1); fx.column(t, EL[this.el].color, 9, 20); } }); yield gap;
+      fx.telegraph(t, R, 0.85); after(0.85, () => { if (!this.dead && !this.yielded) { this.boom(t, R, this.dmg * 1.1); fx.column(t, EL[this.el].color, 9, 20); } }); yield gap;
     }
     yield 0.7;
   }

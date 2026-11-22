@@ -497,7 +497,7 @@ function animGlb(M, a, dt) {
   const p = M.p.body; p.rotation.x = damp(p.rotation.x, lean, 14, dt); p.rotation.y = spin; p.position.y = damp(p.position.y, y, 14, dt);
   if (M.blade) animSwing(M, a);
 }
-const SPRITE_H = { husk: 1.9, skitter: 0.8, spitter: 1.7, brute: 3.1, warder: 2.2, wraith: 2.1, ghorn: 5, cindermaw: 4, brine: 4, skarn: 3, king: 4.4 };
+const SPRITE_H = { husk: 1.9, skitter: 0.8, spitter: 1.7, brute: 3.1, warder: 2.2, wraith: 2.1, ghorn: 5, cindermaw: 4, brine: 4, skarn: 3, king: 4.4, sable: 2 };
 // A model listed in art.json wins over a sprite, which wins over the built-in blocky model.
 function spriteFor(key, o) { const g = ART.models[key]; if (g) return makeGlbModel(g, o); const d = ART.sprites[key]; return d ? makeSpriteModel(d, o) : null; }
 
@@ -569,6 +569,10 @@ export function makeBossModel(id) {
     case 'ghorn': return makeHumanoid({ scale: 2.5, colors: { body: 0x5a4030, head: 0x4a3426, limb: 0x6a4a34, accent: 0x4e9a3a, hand: 0x4a3426 }, eyes: 0x9fff6a, weapon: 'club', tw: 1.0, th: 0.9, td: 0.62, aw: 0.34, al: 0.9, lw: 0.34, leg: 0.7, hs: 0.42, plates: 0x4e9a3a, horns: 0x8a6a3a, mossy: 1 });
     case 'cindermaw': return makeCreature({ body: 'quad', size: 3.1, c1: 0x3a2422, c2: 0xff5a1a, c3: 0xffc23a, horns: 3, spikes: 1, mane: 1, tail: 'flame', eyeGlow: 1, ears: 'point' });
     case 'brine': return makeWraith(0x6ad8ff, { scale: 1.9, base: 0x1f4a6a, crown: 0xd8f6ff, staff: 1 });
+    case 'sable': { // the rival: a dark, hooded mirror of the hero, with a dusk-purple blade
+      const M = makeHumanoid({ scale: 1.05, colors: { body: 0x2a2438, head: 0xe8c8a8, limb: 0x3a3048, accent: 0xb06cff, hood: 0x1f1a2c, leg: 0x1c1826, foot: 0x3a2a2a, hand: 0xe8c8a8 }, eyes: 0x1a1a22, eyeEm: 0, hood: 1, scarf: 0x6a4a9a, belt: 1, weapon: 'sword', blade: 1.25 });
+      M.bladeMat.color.set(0x4a3a70); M.bladeMat.emissive.set(0x7a4ad0); return M;
+    }
     case 'skarn': return makeHumanoid({ scale: 1.5, colors: { body: 0x4a5068, head: 0x2a2e40, limb: 0x5a6078, accent: 0xffe14a }, eyes: 0xffe14a, weapon: 'spear', cape: 0x2f3550, crown: 0xffe14a, belt: 1 });
     default: return makeHumanoid({ scale: 2.15, colors: { body: 0x1a1528, head: 0x0e0b18, limb: 0x241d38, accent: 0xb06cff }, eyes: 0xd0a0ff, weapon: 'great', cape: 0x3a1f6a, crown: 0xd8c070, belt: 1, plates: 0x4a2f8a });
   }

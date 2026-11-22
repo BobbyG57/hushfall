@@ -86,7 +86,7 @@ fade. Song is memory; silence is forgetting.
 | **Brannoc the Smith** | blacksmith | to free Kiln, the Kith partner he abandoned when the Hush came | sword basics, parry, upgrades |
 | **Keeper Oona** | Kith keeper | to keep the Kith safe; she trusts Kith more than people | the Bond Rite, party building, evolution |
 | **Pip** | merchant, comic relief | profit, and secretly to see the world again | Bond Threads, money, rumours and hints |
-| **Sable** | rival | proof that the Hush is kinder than grief; lost family on the Long Note | skill checks between chapters [new] |
+| **Sable** | rival | proof that the Hush is kinder than grief; lost a mother and a little brother on the Long Note | skill checks between chapters [built] |
 | **Ghorn, the Rootwarden** | keeper 1 | protects the Lantern Tree's roots; the Hush made him protect them from everyone | Shrine of Roots boss [built] |
 | **Cindermaw** (once **Kiln**) | keeper 2 | Brannoc's Kith; waited at the forge for him until the Hush turned it wild | Shrine of Cinders boss [built] |
 | **Maressa, the Drowned Cantor** | keeper 3 | drowned her own voice in the mere so the crown could not take it | Shrine of Tides boss [built] |
@@ -146,9 +146,9 @@ tended the Lantern Tree's roots, has walled himself inside his shrine.
   roles: "One to hit hard, one to heal or shield, one for whatever you face
   next." [words]
 - **Turn:** freed, Ghorn says only "Tell Maren the Tree remembers her," and the
-  first lantern relights. [words] + [new] lantern light. **Sable** waits at the
-  east pass: "You woke the Rootwarden? He was *happy* asleep." First duel
-  (short, Sable holds back). [new]
+  first lantern relights. [built] **Sable** waits by the east pass: "So you are
+  the one who woke the Rootwarden. He was happy asleep." First duel (short:
+  Sable hits softer and yields at half health). [built]
 
 ### Chapter 2: Emberridge, the Shrine of Cinders (level 6 to 9)
 
@@ -192,8 +192,9 @@ Hollow King.
   the meadow and Emberridge, with Echo Shards on top, so it pays to go back.
   [new] a few ledges
 - **Turn:** Maressa sings one verse before fading, the first true song Wren has
-  ever heard. The overworld music gains a voice. [built] Sable's second duel:
-  Sable is harder now and uses a Gloam Kith. [new]
+  ever heard. The overworld music gains a voice. [built] Sable's second duel,
+  below the north stair: Sable is harder now, shadow-steps and fires bolts,
+  and fights beside Wisp, a Duskmoth. [built]
 
 ### Chapter 4: Stormreach, the Shrine of Gales (level 16 to 19)
 
@@ -214,7 +215,7 @@ enough to be worth hurting his friend for.
 - **Reward:** the Stormstride Feather, so your dodge becomes a lightning strike.
   Mastering defence turns it into attack. [built]
 - **Turn:** Skarn, beaten, opens the west pass himself: "He was not always
-  like this. Remind him." Sable reaches Gloamwood first. [words] + [new]
+  like this. Remind him." [words] Sable reaches Gloamwood first. [built]
 
 ### Chapter 5: Gloamwood, the Hollow Court (level 21 to 25)
 
@@ -224,8 +225,9 @@ appearing at the edge of the screen.
 
 - **New skill:** none. This chapter tests everything together, and leans on
   your bonds: Kith Arts and Unison Burst.
-- **Sable's last duel** happens at the Court gate. Sable loses, and finally
-  admits they miss the people they lost. Sable steps aside. [new]
+- **Sable's last duel** happens at the Court gate (the doors stay shut until
+  it is won). Sable loses, finally admits missing the people the Long Note
+  took, gives Wren 5 Bond Threads, and steps back into the dusk. [built]
 - **The Hollow King, three phases:** [built] phases exist; [new] phase 3 twist
   1. **Swordsman:** Aurel fights with a moveset like Wren's. A parry exam.
   2. **Crown:** Gloam storms and summons. A dodging exam.
@@ -390,8 +392,8 @@ Roughly from quickest and most valuable to largest.
    `CHAT`, `DOORS`, `BOSS_INTRO`, `FREED`, `OPENS`). Each villager says their
    chapter lines once, then Brannoc, Pip and Oona open their menus and Maren
    repeats a short hint. The lanterns from step 5 came along too, so the
-   dialogue about them is true. Lines about Sable are left out until Sable
-   exists.
+   dialogue about them is true. (Maren now also warns about a stranger by the
+   east pass, from step 6.)
 2. **Echo Shard memories** [words + small]: 16 short memories on pickup.
    **Done 2026-11-22.** The text is `MEMORIES` and `LULLABY` in `src/data.js`.
    Memories show in the dialogue box with their title and pale blue italics,
@@ -419,6 +421,12 @@ Roughly from quickest and most valuable to largest.
    **Done 2026-11-22.** The ghostly villagers left by Husks are still an
    optional extra for later.
 6. **Sable** [new]: three rival duels.
+   **Done 2026-11-22.** `src/rival.js` runs them; Sable's lines and settings
+   are `RIVAL` in `src/data.js`, and Sable fights as a boss (`sable` in `BOSS`)
+   whose moves get harder each duel. Sable never dies: at a set health
+   (half, then 30%, then 10%) the fight stops and Sable talks. Rewards: 150
+   Motes, a Skill Sigil, 5 Bond Threads. Falling, leaving the overworld or
+   running off calls a duel off, and Sable waits to try again.
 7. **The final phase and ending scene** [new]: Kith silenced, Lumen, the
    crown breaking.
 8. **After the ending** [new small]: bond with Lumen, the bonus memory.
