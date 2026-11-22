@@ -12,7 +12,7 @@ import { updateCombat, clearCombat, dropMotes, after } from './combat.js';
 import * as K from './kith.js';
 import { newSave, loadSave, storeSave, wipeSave, loadOpts, importCode } from './save.js';
 import { ART, loadArt } from './art.js';
-import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
+import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, CHAT, DOORS, FREED, OPENS, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
 import { clamp, damp, lerp, smooth, angLerp, angDiff, rand, pick, weighted } from './util.js';
 
 // ---------------------------------------------------------------- renderer + scene
@@ -254,11 +254,14 @@ const game = {
   talk(id) {
     const s = G.save;
     if (id === 'elder') {
-      if (s.quest === 0) ui.say(TALK.elder0, () => ui.starterMenu((sp) => { K.addKith(sp, 2); K.summonActive(); s.quest = 1; audio.sfx('bound'); ui.say([['', `${KITH[sp].name} bounds over and presses its head against your hand.`], ...TALK.elder1], () => game.save()); }));
-      else ui.say(s.quest >= 6 ? TALK.elderEnd : TALK.elderMid);
-    } else if (id === 'smith') { if (!s.tips.smith) { s.tips.smith = 1; ui.say(TALK.smith, () => ui.smithMenu()); } else ui.smithMenu(); }
-    else if (id === 'merchant') { if (!s.tips.merchant) { s.tips.merchant = 1; ui.say(TALK.merchant, () => ui.merchantMenu()); } else ui.merchantMenu(); }
-    else if (id === 'keeper') { if (!s.tips.keeper) { s.tips.keeper = 1; ui.say(TALK.keeper, () => ui.keeperMenu()); } else ui.keeperMenu(); }
+      if (s.quest === 0) { ui.say(TALK.elder0, () => ui.starterMenu((sp) => { K.addKith(sp, 2); K.summonActive(); s.quest = 1; audio.sfx('bound'); ui.say([['', `${KITH[sp].name} bounds over and presses its head against your hand.`], ...TALK.elder1], () => game.save()); })); return; }
+    }
+    // each villager has something new to say once per chapter (CHAT in data.js), then gets on with business
+    const ch = Math.max(1, s.quest), c = CHAT[id] && CHAT[id][ch], heard = id + 'abcdefg'[ch];
+    const menu = { smith: () => ui.smithMenu(), merchant: () => ui.merchantMenu(), keeper: () => ui.keeperMenu() }[id];
+    if (c && c.first && !s.tips[heard]) { s.tips[heard] = 1; ui.say(c.first, () => { game.save(); if (menu) menu(); }); }
+    else if (menu) menu();
+    else if (c && c.again) ui.say(c.again);
   },
   useWaystone(id) {
     const s = G.save;
@@ -283,7 +286,8 @@ const game = {
   },
 
   enterShrine(id) {
-    const def = SHRINES[id], p = G.player;
+    const def = SHRINES[id], p = G.player, door = 'door' + id;
+    if (DOORS[id] && !G.save.tips[door]) { G.save.tips[door] = 1; ui.say([['', DOORS[id]]], () => game.enterShrine(id)); return; }
     transition(() => {
       game.returnPos = { x: p.pos.x, z: p.pos.z }; clearEntities(); world.resetZones();
       const A = buildShrine(def, { onClear: (room, area) => game.shrineClear(def, room, area) });
@@ -297,9 +301,9 @@ const game = {
       A.addPortal(0, room.cz, 'Return to the surface', () => game.leaveArea());
       if (!first) { ui.toast('The guardian falls again.', 'gold'); return; }
       s.shrines[id] = true; s.relics[id] = true; s.sigils += 2; s.quest = Math.max(s.quest, SHRINE_ORDER.indexOf(id) + 2); world.refresh(); G.player.recalc(); audio.sfx('bound');
-      const lines = [['', `The ${def.name.replace(/^The /, '')} wakes, and its song pours back into Vael.`], ['', `You claim the ${def.relic}. ${def.relicDesc}`], ['', 'You also gain 2 Skill Sigils.']];
-      if (id === 'hollow') lines.push(['', 'The Hollow King is silent at last. Thank you for playing Hushfall.'], ['', 'The Abyss, the Hush Rifts and the rarest Kith are still out there.']);
-      else lines.push(['', 'Somewhere far off, a veil of Hush tears open.']);
+      const lines = [...(FREED[id] || [])];
+      if (id === 'hollow') lines.push(['', 'The Hush is broken. You gain 2 Skill Sigils.'], ['', 'Thank you for playing Hushfall.'], ['', 'The Abyss, the Hush Rifts and the rarest Kith are still out there.']);
+      else lines.push(['', `The ${def.name.replace(/^The /, '')} wakes. You claim the ${def.relic}. ${def.relicDesc} You also gain 2 Skill Sigils.`], ['', OPENS[id]]);
       ui.say(lines, () => game.save());
     });
   },
@@ -311,6 +315,7 @@ const game = {
   },
   useWell() {
     const s = G.save; if (!s.relics.cinders) { ui.say(TALK.well0); return; }
+    if (!s.tips.abyss) { s.tips.abyss = 1; ui.say(TALK.well1, () => game.useWell()); return; }
     ui.confirm(`Descend into the Abyss? Record: ${s.abyssBest ? 'floor ' + s.abyssBest : 'none yet'}.`, () => { G.run = { floor: 0, boons: {} }; game.returnPos = { x: -12, z: 16 }; game.nextFloor(); }, 'Descend');
   },
   nextFloor() {

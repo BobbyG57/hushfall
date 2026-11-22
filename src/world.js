@@ -223,9 +223,9 @@ export const world = {
     const tree = new THREE.Group(); tree.position.set(0, y0, 0); g.add(tree);
     mesh(PG.cyl, lit(0x6b4a2b), 3.2, 10, 3.2, 0, 0, 0, tree);
     for (const [x, y, z, s, cl] of [[0, 9, 0, 11, 0x3f9a3c], [3.5, 11.5, 1, 7, 0x58b84a], [-3, 11, -2, 7.5, 0x4aa641], [0.5, 13, -1, 6, 0x7fd060]]) { const cm = lit(cl); cm.transparent = true; this.canopy.push(cm); mesh(PG.sph, cm, s, s * 0.8, s, x, y, z, tree); }
-    const lm = glow(0xffd98a);
-    for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28, r = 3.5 + (i % 3); mesh(PG.sph, lm, 0.45, 0.6, 0.45, Math.cos(a) * r, 6.2 + (i % 2) * 1.2, Math.sin(a) * r, tree, false); }
-    const pl = new THREE.PointLight(0xffd98a, 60, 38, 1.6); pl.position.set(0, 6, 0); tree.add(pl);
+    const lm = glow(0xffd98a); this.lanternOn = lm; this.lanternOff = glow(0x4a4234); this.lanterns = [];
+    for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28, r = 3.5 + (i % 3); this.lanterns.push(mesh(PG.sph, lm, 0.45, 0.6, 0.45, Math.cos(a) * r, 6.2 + (i % 2) * 1.2, Math.sin(a) * r, tree, false)); }
+    const pl = new THREE.PointLight(0xffd98a, 60, 38, 1.6); pl.position.set(0, 6, 0); tree.add(pl); this.treeLight = pl;
     addCircle(0, 0, 1.9);
     // huts
     const roofs = [0xc0503a, 0x3a8a8a, 0xd0a03a, 0x8a5ab0, 0xc0503a, 0x3a8a8a];
@@ -333,6 +333,10 @@ export const world = {
     for (const id in this.way) this.way[id].cm.color.set(s.waystones[id] ? 0x6ff0ff : 0x556070);
     for (const sh of this.shards) { sh.taken = !!s.shards[sh.id]; sh.grp.visible = !sh.taken; }
     for (const c of this.chests) { c.opened = !!s.chests[c.id]; c.lid.rotation.x = c.opened ? -1.9 : 0; }
+    // the Lantern Tree relights as the story goes: one lantern left at the start, all nine at the end
+    const lit = [1, 3, 5, 6, 8, 9][Math.min(5, Object.keys(s.shrines).length)], order = [0, 5, 3, 7, 1, 6, 4, 8, 2];
+    this.lanterns.forEach((m, i) => { m.material = order[i] < lit ? this.lanternOn : this.lanternOff; });
+    this.treeLight.intensity = 15 + 45 * lit / 9;
   },
   resetZones() { for (const z of this.zones) { z.spawned = false; z.alive = []; } },
   respawnAll() { for (const z of this.zones) { for (const e of z.alive) if (!e.dead) e.remove(); z.alive = []; z.spawned = false; z.respawnAt = 0; } },

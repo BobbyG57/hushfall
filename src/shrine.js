@@ -1,7 +1,7 @@
 // Shrines, Hush Rifts and Abyss floors: a chain of walled rooms linked by gated corridors.
 import * as THREE from 'three';
 import { G } from './state.js';
-import { EL, dmgScale } from './data.js';
+import { EL, dmgScale, BOSS_INTRO } from './data.js';
 import { clamp, rand } from './util.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
@@ -74,7 +74,7 @@ export function buildShrine(def, opt = {}) {
       room.state = 'active'; room.wave = 0; audio.sfx('gate');
       if (room.t === 'boss') {
         const b = spawnBoss(def.boss, room.cx, room.cz - 9, this.level); b.yaw = 0; room.bossEnt = b; G.boss = b;
-        G.ui.banner(b.name, EL[b.el].name + ' guardian'); audio.sfx('roar', 0.7); G.game.setMood('boss');
+        G.ui.banner(b.name, this.mode === 'abyss' ? 'An echo from the Undersong' : BOSS_INTRO[def.boss] || EL[b.el].name + ' guardian', 4.5); audio.sfx('roar', 0.7); G.game.setMood('boss');
       } else { room.pending = true; after(0.5, () => { room.pending = false; this.spawnWave(room); }); }
     },
     spawnWave(room) {

@@ -183,38 +183,151 @@ export const NPCS = [
   { id: 'keeper', name: 'Keeper Oona', x: -6, z: 15, look: { body: 0x5a9a4a, head: 0xd8b090, limb: 0x4a7a3a, accent: 0xffffff } },
 ];
 
+// The story is planned in STORY.md. G.save.quest is the chapter: 0 before choosing a Kith,
+// 1 Shrine of Roots, 2 Cinders, 3 Tides, 4 Gales, 5 the Hollow Court, 6 after the ending.
 export const QUESTS = [
-  { text: 'Speak with Elder Maren beneath the Lantern Tree.', at: [4.5, 6.5] },
-  { text: 'Restore the Shrine of Roots, northwest across the meadow.', at: [-62, -66] },
-  { text: 'Take the east pass to Emberridge and restore the Shrine of Cinders.', at: [258, -58] },
-  { text: 'Take the south pass to Mirrormere and restore the Shrine of Tides.', at: [58, 258] },
-  { text: 'Climb the north pass to Stormreach and restore the Shrine of Gales.', at: [-58, -258] },
-  { text: 'Enter Gloamwood through the west pass. End the Hush at the Hollow Court.', at: [-258, 58] },
-  { text: 'Vael sings again. Descend the Abyss beneath the village well, and bond with every Kith.', at: [-16, 12] },
+  { text: 'The last lantern on the Lantern Tree is fading. Find Elder Maren beneath it.', at: [4.5, 6.5] },
+  { text: 'Wake Ghorn, the Rootwarden, in the Shrine of Roots to the northwest.', at: [-62, -66] },
+  { text: 'Take the east pass to Emberridge. Free the beast in the Shrine of Cinders.', at: [258, -58] },
+  { text: 'Take the south pass to Mirrormere. Wake the drowned Cantor in the Shrine of Tides.', at: [58, 258] },
+  { text: 'Climb the north pass to Stormreach. Face Skarn in the Shrine of Gales.', at: [-58, -258] },
+  { text: 'Cross Gloamwood by the west pass. End the Hush at the Hollow Court.', at: [-258, 58] },
+  { text: 'Vael sings again. Bond with every Kith, and see how deep the old well goes.', at: [-16, 12] },
 ];
 
 export const TALK = {
   intro: [
-    ['', 'Once, every stone and stream in Vael had a song.'],
-    ['', 'Then the Hollow King took the crown of silence, and the Hush fell over the land.'],
-    ['', 'Only the Kith still remember the old songs. And only a Blade of the Kith can carry them back.'],
+    ['', 'Once, every stone and stream in Vael had a song, and every song remembered something.'],
+    ['', 'Then the Hollow King put on a crown that makes the world forget, and the Hush fell.'],
+    ['', 'Sixteen years have passed. Only the Kith still remember the old songs.'],
+    ['', 'Tonight, the last lantern on the Lantern Tree is growing dim.'],
   ],
   elder0: [
-    ['Elder Maren', 'You are awake, Wren. Good. The Hush crept closer while you slept.'],
-    ['Elder Maren', 'Five shrines once held the songs of Vael. Each now sits silent, guarded by something that was once its keeper.'],
-    ['Elder Maren', 'You cannot walk that road alone. Three young Kith have come to the Lantern Tree. Choose the one whose song answers yours.'],
+    ['Elder Maren', 'Wren. You felt it too, then. The last lantern is going out.'],
+    ['Elder Maren', 'Five shrines once kept the songs of Vael. When the Hush came, their keepers forgot themselves. Now they guard the silence instead.'],
+    ['Elder Maren', 'I am too old to wake them. But look: three young Kith came to the Tree tonight. No Kith has come here in sixteen years.'],
+    ['Elder Maren', 'They came for you, I think. Choose the one whose song answers yours.'],
   ],
   elder1: [
-    ['Elder Maren', 'A fine bond. Your blade will take on your Kith\'s element, so choose who walks beside you with care.'],
-    ['Elder Maren', 'The Shrine of Roots lies northwest, past the old stones. Wild Kith roam the meadow: weaken one, then offer it a Bond Thread.'],
-    ['Elder Maren', 'Rest at Waystones when you are weary. Go well, Blade of the Kith.'],
+    ['Elder Maren', 'There. You hear nothing, I know. But it does. Kith hear the song that you cannot.'],
+    ['Elder Maren', 'Your blade takes on the element of the Kith beside you. Ember burns Verdant, Verdant grounds Storm, Storm shocks Tide, and Tide douses Ember.'],
+    ['Elder Maren', 'Wild Kith roam the meadow. Weaken one, then offer it a Bond Thread, and it may choose to join you. Pip sells the threads.'],
+    ['Elder Maren', 'The Shrine of Roots lies northwest, past the old stones. Its keeper is Ghorn. He tended this very Tree, once. Be gentle with him, if you can.'],
+    ['Elder Maren', 'Rest at Waystones when you are weary. Go well, Wren.'],
   ],
-  elderMid: [['Elder Maren', 'I can hear it, faintly. A song returning. Keep going, child. The passes will open as the shrines wake.']],
-  elderEnd: [['Elder Maren', 'Listen. The whole valley is singing. If you still hunger for a fight, the old well leads somewhere very deep.']],
-  smith: [['Brannoc', 'Blade looks thirsty. Bring me Motes and I will put an edge on it you can hear.']],
-  merchant: [['Pip', 'Threads for binding, friend! Spun fresh this morning. Mostly fresh.']],
-  keeper: [['Keeper Oona', 'Your Kith are welcome in my grove. Tell me who should walk with you.']],
   well0: [['', 'A dry well. Cold air breathes up from somewhere far below. It is sealed with a rune of flame.']],
+  well1: [
+    ['', 'The flame rune on the well has cracked open. Silence breathes up from below, colder than any night.'],
+    ['', 'This is the Undersong, the silence beneath Vael, where the Hush was born. They say it has no bottom.'],
+  ],
+};
+
+// Carved over each shrine door, read the first time you enter. Each one hints at the element to bring.
+export const DOORS = {
+  roots: 'Words are carved into the living wood above the door: "Ember wakes what roots forget."',
+  cinders: 'Words are cut into the cooled lava above the door: "The tide cools what the fire holds too long."',
+  tides: 'Words shimmer on the wet stone above the door: "Thunder wakes the stillest water."',
+  gales: 'Words are scored deep into the stone above the door: "Roots hold where the wind would scatter."',
+  hollow: 'Every word above this door has been scratched away but one line: "Bring the ones you love."',
+};
+
+// Shown under the guardian's name when the boss fight starts.
+export const BOSS_INTRO = {
+  ghorn: '"Hush now, little one. Sleep, like all the others."',
+  cindermaw: 'It looks past you, toward Lanternrest. It is still waiting for someone.',
+  brine: 'She sings, and there is no sound at all.',
+  skarn: '"Show me you are worth hurting him for."',
+  king: '"Why would anyone want to remember?"',
+};
+
+// Said when a shrine's guardian is freed for the first time, before the relic.
+export const FREED = {
+  roots: [
+    ['', 'The great roots go still. The giant blinks, slowly, like someone waking from a very long sleep.'],
+    ['Ghorn', 'The roots... I remember the roots. And the Tree. And her.'],
+    ['Ghorn', 'Tell Maren the Tree remembers her. Tell her it was never her fault.'],
+  ],
+  cinders: [
+    ['', 'The fire drains out of the beast. It shrinks and cools until a small forge-Kith stands blinking in the ash.'],
+    ['', 'Kiln, the keeper of Cinders, turns toward Lanternrest, toward Brannoc, and lets out a long, low hum.'],
+  ],
+  tides: [
+    ['Maressa', 'You found me. And you found my voice, down here in the dark where I hid it.'],
+    ['Maressa', 'Here. Let me give it back to Vael.'],
+    ['', 'She sings a single verse. And for the first time in your life, you hear it: the song.'],
+  ],
+  gales: [
+    ['Skarn', 'Good. You are worth it.'],
+    ['Skarn', 'He was not always like this, child. He was the kindest of us. When you reach him, remind him.'],
+    ['', 'Skarn lowers his spear and steps aside. The north wind falls quiet.'],
+  ],
+  hollow: [
+    ['', 'The Hollow Crown cracks.'],
+    ['', 'From the shadows at the edge of the court, a black fox steps into the light.'],
+    ['The Hollow King', 'Lumen?'],
+    ['', 'The fox presses its head against his hand, the way your Kith did on the night you met.'],
+    ['Aurel', 'I wanted to stop missing you. So I made the whole world forget, and I forgot myself with it.'],
+    ['Aurel', 'Tell Maren... no. I will tell her myself, in the song.'],
+    ['', 'He sets the crown down. He and Lumen fade into the light together.'],
+    ['', 'And then you hear it. All of it. Every stone and stream in Vael, singing.'],
+    ['', 'It sounds like something you have always known. As if you had been part of it all along.'],
+  ],
+};
+
+// After the relic: what opens next.
+export const OPENS = {
+  roots: 'To the east, the veil of Hush over the mountain pass tears open. In Lanternrest, lanterns kindle on the Tree.',
+  cinders: 'To the south, the veil over the Mirrormere pass tears open. In Lanternrest, the flame rune on the old well cracks.',
+  tides: 'To the north, the veil over the Stormreach stair tears open. More lanterns kindle on the Tree.',
+  gales: 'To the west, the veil over Gloamwood tears open. Only one lantern on the Tree is still dark.',
+};
+
+// What the villagers say, chapter by chapter (indexed like G.save.quest). `first` is said once per
+// chapter; Brannoc, Pip and Oona then open their menus, and Maren repeats her `again` line.
+const ch = (first, again) => ({ first, again });
+const maren = (t) => ['Elder Maren', t], bran = (t) => ['Brannoc', t], pip = (t) => ['Pip', t], oona = (t) => ['Keeper Oona', t];
+export const CHAT = {
+  elder: [
+    null,
+    ch(null, [maren('Northwest, past the old stones, to the Shrine of Roots. Ghorn\'s roots fear fire, if any of your Kith can burn.'), maren('When you grow stronger, open the menu and spend your Skill Sigils. A blade can learn new songs too.')]),
+    ch([maren('Lanterns have lit themselves on the Tree. Ghorn is free, then.'), maren('He said the Tree remembers me? That old root. I would rather it forgot a few things.'), maren('The east pass is open. Beyond it lie Emberridge and the Shrine of Cinders. Brannoc knows that mountain better than anyone, though he will not say so.')],
+      [maren('East, to Emberridge. Ask Brannoc about the mountain, and be patient if he will not answer.')]),
+    ch([maren('More of the lanterns are burning now. And Brannoc is singing at his forge. Badly, but singing.'), maren('The south pass leads to Mirrormere. Maressa sleeps beneath the mere: the Cantor. Hers was the loveliest voice in Vael.'), maren('Still water fears the storm. Something that crackles would serve you well there.')],
+      [maren('South, to Mirrormere. Bring something that crackles.')]),
+    ch([maren('Maressa sang for you? Then you have heard it at last, a little.'), maren('There is something I should have told you at the start. The Hollow King has a name. Aurel. He was my student.'), maren('He was the Blade of the Kith before you. A kind boy, with an Umbrafox called Lumen who never left his side. When Lumen was lost, Aurel could not bear the songs that remembered him.'), maren('Skarn guards the Shrine of Gales, up the north stair. He was Aurel\'s oldest friend. Wind scatters, but roots hold: bring your meadow Kith.')],
+      [maren('North, to Stormreach. Skarn will not go easy on you. Roots hold where the wind would scatter.')]),
+    ch([maren('Only one lantern left dark.'), maren('The west pass is open, and the Hollow Court lies beyond Gloamwood. Nothing there is weak to anything, child. Bring the Kith you trust most.'), maren('If you see Aurel, tell him I am sorry. Tell him Lumen would never have wanted this.')],
+      [maren('West, through Gloamwood, to the Hollow Court. Bring the Kith you trust most.')]),
+    ch([maren('Listen. The whole valley is singing. You can hear it now, can\'t you?'), maren('I found you among the roots of this Tree the night the Hush fell, wrapped in nothing but light. I think the song hid its last note in you, where the crown could not reach.'), maren('If you still hunger for a fight, the old well goes deeper than anyone knows. And there are Kith out there you have never met.')],
+      [maren('The well goes very deep. And there are Kith out there you have never met.')]),
+  ],
+  smith: [
+    null,
+    ch([bran('Maren\'s foundling. Wren, is it? That blade of yours is thirsty.'), bran('Light strikes chain together. Hold a heavy strike to drive the point home: it breaks a guard. And dodge through a blow, never back away from it.'), bran('Bring me Motes and I will put an edge on that blade you can hear.')]),
+    ch([bran('Emberridge. Of course it is Emberridge next.'), bran('I was keeper of the Shrine of Cinders, once. Kiln was my Kith. Best forge partner a smith ever had.'), bran('When the Hush came, I ran. Kiln stayed, and waited at the forge for me. I hear it is something else now.'), bran('The beasts up there hit too hard to trade blows with. Tap your guard just as a blow lands and you will turn it aside. Then make them pay.'), bran('And tide douses ember. If you have a water Kith, bring it.')]),
+    ch([bran('You brought Kiln home. It remembered me, at the end. It remembered.'), bran('I will not forget that. Not ever.'), bran('Mirrormere next. The shield-bearers there block anything from the front. Hit them hard enough to break the guard, or get behind them.')]),
+    ch([bran('Skarn. I sparred with him when we were young. He fights the way the wind changes: you only see it after.'), bran('If you have the Sigils, learn Flash Step. Dodge at the very last instant and the world slows down for you.'), bran('Some fighters parry and punish. Some dance. Some let their Kith carry the fight. Find out which one you are.')]),
+    ch([bran('Gloamwood. I will make your blade as sharp as I can. That is all I can give you now.')]),
+    ch([bran('Hear that? Kiln is humming at the forge again. Bring me Motes and I will make that blade sing back.')]),
+  ],
+  merchant: [
+    null,
+    ch([pip('Threads for binding, friend! Spun fresh this morning. Mostly fresh.'), pip('A Bond Thread is how you ask a Kith to stay. Tire it out first, mind. Nobody listens to an offer while they are winning.')]),
+    ch([pip('Emberridge, is it? Hot, rocky, everything on fire. Terrible for business. Take extra Threads.'), pip('Word is the big brutes up there swing slow and hit like falling houses. Old Brannoc could tell you more, if he felt like talking. He never does.')]),
+    ch([pip('Mirrormere! I used to sell there. Turns out nobody buys from a merchant with no reflection.'), pip('Storm Kith crackle across water like nobody\'s business. Voltkits run all over the meadow, if you can catch one.')]),
+    ch([pip('Stormreach. Hold on to your hat. Hold on to my Threads, too: no refunds.'), pip('The wind spirits up there blink right past you. Keep your eyes on them or lose them. Meadow folk swear by roots against wind.')]),
+    ch([pip('Gloamwood? Nobody comes back from Gloamwood with Threads left. Which is to say: buy lots.'), pip('Some say there is a black fox in there that is not a Kith at all, but a memory. Some say a lot of things. I say: buy Threads.')]),
+    ch([pip('Business is booming! Everyone wants Threads now the Kith are singing. The rarest ones live deepest, mind.')]),
+  ],
+  keeper: [
+    null,
+    ch([oona('Your Kith are welcome in my grove. Any you bond with but cannot carry will wait here, safe.'), oona('A wild Kith will only hear a Bond Rite once it is tired, below half its strength. The weaker it is, the easier the song is to match. Mind your timing on the ring.'), oona('And Ghorn\'s roots fear fire, little one. If none of your Kith can burn, keep moving and stay out of his reach.')]),
+    ch([oona('Three may walk with you now. Choose them like a song: one to hit hard, one to keep you standing, and one for whatever lies ahead.'), oona('Kith grow into new shapes when they are ready. Mosslings, Cinderpups, Puddlefins and Voltkits around level ten. Others take longer.')]),
+    ch([oona('Water is patient, but lightning is not. A storm Kith will serve you at the mere.')]),
+    ch([oona('Your meadow friends will have grown by now. Roots hold fast against the wind, and Skarn\'s storms will break on them.')]),
+    ch([oona('In Gloamwood nothing has a weakness, and nothing is safe. Take the three you trust most. That is all a bond really is.')]),
+    ch([oona('The Kith are singing in every corner of Vael. Even the shy ones. Even the one in Gloamwood that only shows itself when it wants to.')]),
+  ],
 };
 
 export const TIPS = {
