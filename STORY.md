@@ -192,7 +192,7 @@ Hollow King.
   the meadow and Emberridge, with Echo Shards on top, so it pays to go back.
   [new] a few ledges
 - **Turn:** Maressa sings one verse before fading, the first true song Wren has
-  ever heard. The overworld music gains a voice. [new] Sable's second duel:
+  ever heard. The overworld music gains a voice. [built] Sable's second duel:
   Sable is harder now and uses a Gloam Kith. [new]
 
 ### Chapter 4: Stormreach, the Shrine of Gales (level 16 to 19)
@@ -334,9 +334,15 @@ the money point somewhere.
 
 Small touches that make the story feel real as you progress:
 
-- **Music grows.** The overworld music gains a layer each time a shrine wakes,
-  until the ending plays the full song. [new] (in the music tables)
-- **Colour returns.** Grey edges creep back from each woken region. [new]
+- **Music grows.** [built] The overworld music gains a layer each time a shrine
+  wakes. Under the Hush the melody is sparse and muffled; Roots brings it back,
+  Cinders adds a soft forge heartbeat, Tides a singing voice, Gales high wind
+  chimes, and the Hollow Court a harmony line: the full song. Shrines, bosses
+  and the title screen play as before. (`audio.js`, `setSong`)
+- **Colour returns.** [built] Each region is greyed by the Hush until its
+  shrine wakes; the meadow only greys toward its edges, so Lanternrest keeps
+  its colour. Leaving a shrine you just woke, you watch the colour flood back
+  over a few seconds, in the ground, plants and sky. (`world.js`, `applyHush`)
 - **Lanterns relight** on the Lantern Tree as shrines wake: one lit at the
   start, all nine at the end. [built]
 - **People change their lines** after each chapter (Maren, Brannoc, Oona, Pip
@@ -410,6 +416,8 @@ Roughly from quickest and most valuable to largest.
    Sigil (the parry trial, from chapter 2). Walking away, falling or leaving
    the overworld stops a trial, and it can be started again.
 5. **The world reacts** [new]: music layers, colour returning (lanterns done).
+   **Done 2026-11-22.** The ghostly villagers left by Husks are still an
+   optional extra for later.
 6. **Sable** [new]: three rival duels.
 7. **The final phase and ending scene** [new]: Kith silenced, Lumen, the
    crown breaking.

@@ -6,7 +6,21 @@ import { BIOME, PASS, WAYSTONES, SHRINES, CAMPS, KZONES, KTABLE, RIFTS, NPCS, EL
 import { makeNpcModel, animate } from './models.js';
 import { spawnEnemy, spawnWild } from './enemies.js';
 import { fx } from './fx.js';
+import { audio } from './audio.js';
 import { ART } from './art.js';
+
+// The Hush greys each region until its shrine wakes (STORY.md, section 8). The meadow only greys toward
+// its edges, so Lanternrest keeps its colour. When a shrine wakes, the colour floods back over a few seconds.
+const REGIONS = ['meadow', 'ember', 'tide', 'storm', 'gloam'];
+const HUSH_SHRINE = { meadow: 'roots', ember: 'cinders', tide: 'tides', storm: 'gales', gloam: 'hollow' };
+const HUSH_MAX = { meadow: 0.45, ember: 0.55, tide: 0.55, storm: 0.55, gloam: 0.5 };
+const meadowEdge = (r) => smooth(30, 105, r);
+function greyed(arr, i, base, k) {   // move one rgb triple from its base colour toward a cool grey
+  const r = base[i], g = base[i + 1], b = base[i + 2];
+  if (k <= 0.001) { arr[i] = r; arr[i + 1] = g; arr[i + 2] = b; return; }
+  const l = (r * 0.3 + g * 0.59 + b * 0.11) * 0.95;
+  arr[i] = r + (l - r) * k; arr[i + 1] = g + (l - g) * k; arr[i + 2] = b + (l * 1.04 - b) * k;
+}
 
 // conditions for story spots in EXTRA_ZONES
 const ZONE_COND = {
@@ -121,7 +135,7 @@ export const world = {
   gradAt(x, z) { return { x: (this.heightAt(x + 0.6, z) - this.heightAt(x - 0.6, z)) / 1.2, z: (this.heightAt(x, z + 0.6) - this.heightAt(x, z - 0.6)) / 1.2 }; },
   biomeAt,
   env(pos) {
-    const r = Math.hypot(pos.x, pos.z), w = smooth(112, 138, r); return { a: BIOME.meadow, b: BIOME[outerBiome(pos.x, pos.z)], w, fogNear: 45, fogFar: 235 };
+    const r = Math.hypot(pos.x, pos.z), w = smooth(112, 138, r); return { a: BIOME.meadow, b: BIOME[outerBiome(pos.x, pos.z)], w, fogNear: 45, fogFar: 235, hush: this.hushAt(pos.x, pos.z) };
   },
   camBlocked(p) { return p.y < this.heightAt(p.x, p.z) + 0.5; },
   resolve(pos, r, ent) {
@@ -219,8 +233,38 @@ export const world = {
     }
 
     this.buildVillage(g); this.buildPois(g, R);
+    this.setupHush(tg.attributes.color);
     this.refresh();
   },
+
+  // remember every colour as built, and how much each terrain vertex and meadow plant belongs to
+  // the meadow's edge or to an outer region, so the Hush can be laid over and lifted cheaply
+  setupHush(colAttr) {
+    this.terrainCol = colAttr; this.baseCol = colAttr.array.slice();
+    const n = NV * NV; this.vM = new Float32Array(n); this.vW = new Float32Array(n); this.vB = new Uint8Array(n);
+    for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) {
+      const o = j * NV + i, x = -HALF + i * CELL, z = -HALF + j * CELL, r = Math.hypot(x, z), w = smooth(112, 138, r);
+      this.vM[o] = meadowEdge(r) * (1 - w); this.vW[o] = w; this.vB[o] = REGIONS.indexOf(outerBiome(x, z));
+    }
+    const m = new THREE.Matrix4(), v = new THREE.Vector3();
+    for (const pm of this.propMeshes) {
+      if (!pm.im.instanceColor) continue;
+      pm.base = pm.im.instanceColor.array.slice();
+      if (pm.biome === 'meadow') { pm.edge = new Float32Array(pm.im.count); for (let i = 0; i < pm.im.count; i++) { pm.im.getMatrixAt(i, m); v.setFromMatrixPosition(m); pm.edge[i] = meadowEdge(Math.hypot(v.x, v.z)); } }
+    }
+  },
+  applyHush() {
+    const h = this.hush, hb = REGIONS.map((b) => h[b]), out = this.terrainCol.array, base = this.baseCol;
+    for (let o = 0, n = this.vM.length; o < n; o++) greyed(out, o * 3, base, h.meadow * this.vM[o] + hb[this.vB[o]] * this.vW[o]);
+    this.terrainCol.needsUpdate = true;
+    for (const pm of this.propMeshes) {
+      if (!pm.base) continue; const arr = pm.im.instanceColor.array, kb = h[pm.biome] || 0;
+      for (let i = 0; i < pm.im.count; i++) greyed(arr, i * 3, pm.base, pm.edge ? kb * pm.edge[i] : kb);
+      pm.im.instanceColor.needsUpdate = true;
+    }
+  },
+  // how grey the Hush has left this spot (used for the sky, fog and light)
+  hushAt(x, z) { if (!this.hush) return 0; const r = Math.hypot(x, z), w = smooth(112, 138, r); return lerp(this.hush.meadow * meadowEdge(r), this.hush[outerBiome(x, z)], w); },
 
   buildVillage(g) {
     const y0 = this.heightAt(0, 0);
@@ -363,6 +407,10 @@ export const world = {
     const lit = [1, 3, 5, 6, 8, 9][Math.min(5, Object.keys(s.shrines).length)], order = [0, 5, 3, 7, 1, 6, 4, 8, 2];
     this.lanterns.forEach((m, i) => { m.material = order[i] < lit ? this.lanternOn : this.lanternOff; });
     this.treeLight.intensity = 15 + 45 * lit / 9;
+    // the Hush lifts from woken regions (snapped on load, animated in update after that), and the music grows
+    const target = {}; for (const b of REGIONS) target[b] = s.shrines[HUSH_SHRINE[b]] ? 0 : HUSH_MAX[b];
+    if (!this.hush || this.hushSave !== s) { this.hush = target; this.hushSave = s; this.hushTarget = null; this.applyHush(); } else this.hushTarget = target;
+    audio.setSong(Object.keys(s.shrines).length);
   },
   resetZones() { for (const z of this.zones) { z.spawned = false; z.alive = []; } },
   respawnAll() { for (const z of this.zones) { for (const e of z.alive) if (!e.dead) e.remove(); z.alive = []; z.spawned = false; z.respawnAt = 0; } },
@@ -394,6 +442,13 @@ export const world = {
           else if (z.kind === 'kith' && d < 26) for (const e of z.alive) if (!s.dex[e.species]) { s.dex[e.species] = 1; G.game.tip('kith'); }
         }
       }
+    }
+    if (this.hushTarget) {   // colour flooding back into a woken region
+      let moving = false, moved = 0;
+      for (const b of REGIONS) { const d = this.hushTarget[b] - this.hush[b]; if (Math.abs(d) > 0.0005) { const st = Math.sign(d) * Math.min(Math.abs(d), dt * 0.2); this.hush[b] += st; moved += Math.abs(st); moving = true; } }
+      this.hushMoved = (this.hushMoved || 0) + moved;
+      if (!moving || this.hushMoved > 0.02) { this.applyHush(); this.hushMoved = 0; }
+      if (!moving) this.hushTarget = null;
     }
     if (this.steam && Math.hypot(p.x - SPRINGS.x, p.z - SPRINGS.z) < 90 && Math.random() < dt * 14) {
       const v = this.steam[Math.floor(Math.random() * this.steam.length)], a = rand(6.28), d = rand(0, v.r * 0.8);

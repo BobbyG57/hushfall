@@ -76,20 +76,38 @@ const MOODS = {
   boss: { root: 45, scale: 'phr', bpm: 132, chords: [0, 1, 3, 1], melody: 0.6, bright: 1800, drive: 1 },
 };
 let mood = 'title', moodDef = MOODS.title, step = 0, nextT = 0, melIdx = 2, intensity = 0;
+// The overworld music grows as the shrines wake (STORY.md, section 8). Under the Hush the melody is
+// sparse and muffled; the Shrine of Roots brings it back, Cinders adds a forge heartbeat, Tides a
+// voice, Gales wind chimes, and the Hollow Court a harmony line: the full song. Shrines, bosses and
+// the title screen always play as before.
+const OVERWORLD = { meadow: 1, ember: 1, tide: 1, storm: 1, gloam: 1 };
+let song = 5;
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const deg = (d) => { const sc = SCALES[moodDef.scale]; const o = Math.floor(d / sc.length); return moodDef.root + sc[((d % sc.length) + sc.length) % sc.length] + 12 * o; };
 
-function pad(d, dur) {
+function pad(d, dur, bright = 1) {
   for (const off of [0, 2, 4]) {
     const f = mtof(deg(d + off));
     for (const det of [-5, 6]) {
       const t = now(), o = ctx.createOscillator(), g = ctx.createGain(), fl = ctx.createBiquadFilter();
       o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
-      fl.type = 'lowpass'; fl.frequency.value = moodDef.bright * 0.5;
+      fl.type = 'lowpass'; fl.frequency.value = moodDef.bright * 0.5 * bright;
       g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.03, t + dur * 0.4); g.gain.linearRampToValueAtTime(0.0001, t + dur * 1.15);
       o.connect(fl).connect(g).connect(musBus); o.start(t); o.stop(t + dur * 1.2);
     }
   }
+}
+// a sung note: two soft oscillators with vibrato through a vowel-like filter
+function voice(d, dur, at) {
+  const t = now() + at, f = mtof(deg(d)), g = ctx.createGain(), fl = ctx.createBiquadFilter(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+  fl.type = 'bandpass'; fl.frequency.value = 1050; fl.Q.value = 1.1;
+  lfo.frequency.value = 5.2; lg.gain.value = f * 0.011; lfo.connect(lg);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.055, t + dur * 0.3); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  for (const [type, mul, v] of [['triangle', 1, 1], ['sine', 2, 0.35]]) {
+    const o = ctx.createOscillator(), og = ctx.createGain(); o.type = type; o.frequency.value = f * mul; og.gain.value = v;
+    lg.connect(o.frequency); o.connect(og).connect(fl); o.start(t); o.stop(t + dur + 0.05);
+  }
+  fl.connect(g).connect(musBus); lfo.start(t); lfo.stop(t + dur + 0.05);
 }
 function schedule() {
   if (!ctx || ctx.state !== 'running') return;
@@ -98,14 +116,21 @@ function schedule() {
   while (nextT < now() + 0.12) {
     const bar = Math.floor(step / 16), s = step % 16, chord = moodDef.chords[bar % moodDef.chords.length];
     const at = nextT - now();
-    const drive = moodDef.drive || intensity;
-    if (s === 0) pad(chord, sixteenth * 16);
+    const drive = moodDef.drive || intensity, L = OVERWORLD[mood] ? song : -1;   // L: song layers, -1 when not in the overworld
+    if (s === 0) pad(chord, sixteenth * 16, L === 0 ? 0.65 : L > 0 && L < 5 ? 0.8 + 0.04 * L : 1);
     if (s % 4 === 0) tone(mtof(deg(chord) - 12), sixteenth * 3.5, 'sine', 0.1 + 0.08 * drive, 0, at, musBus);
-    if (s % 2 === 0 && Math.random() < moodDef.melody * (s % 4 === 0 ? 1.2 : 0.7)) {
+    if (s % 2 === 0 && Math.random() < moodDef.melody * (L === 0 ? 0.3 : 1) * (s % 4 === 0 ? 1.2 : 0.7)) {
       melIdx += Math.floor(Math.random() * 5) - 2; if (melIdx < 0) melIdx = 1; if (melIdx > 9) melIdx = 8;
       const f = mtof(deg(chord + melIdx) + 12);
       tone(f, sixteenth * 3, 'triangle', 0.07, 0, at, musBus); tone(f * 2, sixteenth * 2, 'sine', 0.02, 0, at, musBus);
+      if (L >= 5) tone(mtof(deg(chord + melIdx + 2) + 12), sixteenth * 3, 'triangle', 0.035, 0, at + 0.01, musBus);   // harmony
     }
+    if (L >= 2 && drive <= 0.3) {   // the forge heartbeat
+      if (s === 0 || s === 8) tone(95, 0.2, 'sine', 0.11, 42, at, musBus);
+      if (s === 4 || s === 12) hiss(0.05, 0.03, 1100, 0, 'bandpass', 1.4, at, musBus);
+    }
+    if (L >= 3 && s === 0) voice(chord + [2, 4, 5, 4][bar % 4], sixteenth * 14, at);   // Maressa's voice
+    if (L >= 4 && s % 2 === 1 && Math.random() < 0.5) tone(mtof(deg(chord + [0, 2, 4, 5, 7][Math.floor(Math.random() * 5)]) + 24), sixteenth * 2.5, 'sine', 0.022, 0, at, musBus);   // wind chimes
     if (drive > 0.3) {
       if (s % 8 === 0) { tone(110, 0.16, 'sine', 0.28 * drive, 38, at, musBus); }
       if (s % 8 === 4) hiss(0.1, 0.12 * drive, 1800, 0, 'bandpass', 0.8, at, musBus);
@@ -133,6 +158,7 @@ export const audio = {
   get running() { return !!ctx && ctx.state === 'running'; },
   sfx(name, vol = 1) { if (!ctx || ctx.state !== 'running') return; const f = SFX[name]; if (f) { try { f(vol); } catch (e) { /* ignore */ } } },
   setMood(m) { if (m !== mood && MOODS[m]) { mood = m; moodDef = MOODS[m]; } },
+  setSong(n) { song = Math.max(0, Math.min(5, n)); },   // how many shrines are awake
   setVolume(v) { G.opts.volume = v; if (master) master.gain.value = v; },
   update(dt, inCombat) { intensity += ((inCombat ? 1 : 0) - intensity) * Math.min(1, dt * 1.5); schedule(); },
 };

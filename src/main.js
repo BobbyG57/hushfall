@@ -50,11 +50,13 @@ addEventListener('resize', applyQuality);
 const env = { fog: new THREE.Color(0xbfe2f2), top: new THREE.Color(0x3f8fe0), sun: new THREE.Color(0xfff1d0), amb: 1, day: 1, near: 45, far: 235 };
 const tF = new THREE.Color(), tT = new THREE.Color(), tS = new THREE.Color(), tX = new THREE.Color(), NIGHT = new THREE.Color(0x1a2648), NTOP = new THREE.Color(0x0a1136), MOON = new THREE.Color(0x9fb4ff), DUSK = new THREE.Color(0xff9a5a), WHITE = new THREE.Color(0xffffff);
 const sunDir = new THREE.Vector3(0.5, 1, 0.4).normalize(), ZERO = new THREE.Vector3();
+const hushGrey = (c, k) => { const l = c.r * 0.3 + c.g * 0.59 + c.b * 0.11; c.r += (l - c.r) * k; c.g += (l - c.g) * k; c.b += (l * 1.04 - c.b) * k; };
 function updateEnv(dt) {
   const pos = G.player && !G.atTitle ? G.player.pos : ZERO, e = G.area.env(pos); let amb, dayl = 1;
   if (e.flat) { tF.copy(e.fog); tT.copy(e.fog); tS.copy(e.sun); amb = e.amb; sunDir.set(0.35, 1, 0.3).normalize(); }
   else {
     tF.setHex(e.a.fog).lerp(tX.setHex(e.b.fog), e.w); tT.setHex(e.a.skyTop).lerp(tX.setHex(e.b.skyTop), e.w); tS.setHex(e.a.sun).lerp(tX.setHex(e.b.sun), e.w); amb = lerp(e.a.amb, e.b.amb, e.w);
+    if (e.hush > 0.01) { hushGrey(tF, e.hush * 0.8); hushGrey(tT, e.hush * 0.8); hushGrey(tS, e.hush * 0.6); }   // the Hush greys the sky too
     const dayT = ((G.save ? G.save.playtime : 0) / 840 + 0.07) % 1, s = Math.sin(dayT * Math.PI * 2); dayl = smooth(-0.55, -0.1, s);
     const dusk = smooth(0.4, 0, Math.abs(s + 0.05)) * 0.55;
     tF.lerp(NIGHT, (1 - dayl) * 0.86).lerp(DUSK, dusk * 0.4 * dayl); tT.lerp(NTOP, (1 - dayl) * 0.94); tS.lerp(DUSK, dusk).lerp(MOON, 1 - dayl);
