@@ -250,8 +250,8 @@ export const world = {
     // NPCs
     for (const n of NPCS) {
       const m = makeNpcModel(n.look, n.id); const y = this.heightAt(n.x, n.z); m.root.position.set(n.x, y, n.z); m.root.rotation.y = Math.atan2(-n.x * 0.35, 1); g.add(m.root);
-      this.npcs.push({ m, t: rand(10) }); addCircle(n.x, n.z, 0.6);
-      this.interactables.push({ pos: new THREE.Vector3(n.x, y, n.z), r: 2.9, label: 'Talk to ' + n.name, use: () => G.game.talk(n.id) });
+      this.npcs.push({ id: n.id, m, t: rand(10) }); addCircle(n.x, n.z, 0.6);
+      this.interactables.push({ pos: new THREE.Vector3(n.x, y, n.z), r: 2.9, label: 'Talk to ' + n.name, cond: () => !(G.trials && G.trials.hidden === n.id), use: () => G.game.talk(n.id) });
     }
     this.pois.push({ type: 'village', x: 0, z: 0, name: 'Lanternrest' });
   },

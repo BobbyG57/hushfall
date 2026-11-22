@@ -73,6 +73,10 @@ export const ENEMY = {
   brute: { name: 'Brute', hp: 115, dmg: 15, speed: 3.1, radius: 1.05, poise: 60, xp: 3, ai: 'brute', range: 3.2 },
   warder: { name: 'Warder', hp: 70, dmg: 12, speed: 3.3, radius: 0.7, poise: 40, xp: 2.2, ai: 'shield', range: 3.0 },
   wraith: { name: 'Wraith', hp: 55, dmg: 13, speed: 5, radius: 0.6, poise: 22, xp: 2.5, ai: 'blink', range: 3 },
+  // training only (see TRAINING): dummies never fight back, and Brannoc spars without meaning it
+  dummy: { name: 'Straw dummy', hp: 40, dmg: 0, speed: 0, radius: 0.55, poise: 0, xp: 0, ai: 'dummy', range: 0 },
+  shielddummy: { name: 'Shielded dummy', hp: 26, dmg: 0, speed: 0, radius: 0.6, poise: 99, xp: 0, ai: 'dummy', range: 0, shield: true },
+  spar: { name: 'Brannoc', hp: 999, dmg: 3, speed: 3.4, radius: 0.6, poise: 999, xp: 0, ai: 'spar', range: 2.2 },
 };
 
 export const BOSS = {
@@ -228,6 +232,7 @@ export const TALK = {
     ['Elder Maren', 'Your blade takes on the element of the Kith beside you. Ember burns Verdant, Verdant grounds Storm, Storm shocks Tide, and Tide douses Ember.'],
     ['Elder Maren', 'Wild Kith roam the meadow. Weaken one, then offer it a Bond Thread, and it may choose to join you. Pip sells the threads.'],
     ['Elder Maren', 'The Shrine of Roots lies northwest, past the old stones. Its keeper is Ghorn. He tended this very Tree, once. Be gentle with him, if you can.'],
+    ['Elder Maren', 'Before you go, find Brannoc at his forge and Oona in her grove. They can teach you what I cannot.'],
     ['Elder Maren', 'Rest at Waystones when you are weary. Go well, Wren.'],
   ],
   well0: [['', 'A dry well. Cold air breathes up from somewhere far below. It is sealed with a rune of flame.']],
@@ -387,6 +392,35 @@ export const LULLABY = mem('Lullaby',
   ['', 'The baby hums the last note back to her, perfectly. Maren laughs for the first time in days. Above them, one lantern flickers into light.']);
 // a memory as dialogue: its title rides on the first line
 export const memoryLines = (m) => m.lines.map((l, i) => (i === 0 ? ['Memory: ' + m.title, l[1]] : l));
+
+// Training with Brannoc and Oona (STORY.md, build step 4; run by src/trials.js). Each trial is offered
+// from that villager's menu; the practice yard and the Bond Rite lesson are suggested as objectives
+// before the Shrine of Roots, and the parry trial opens in chapter 2.
+export const TRAINING = {
+  yard: { x: -10, z: -10, npc: 'smith', from: 1 },     // Brannoc's practice yard, by the forge
+  grove: { x: -10, z: 19, npc: 'keeper', from: 1 },    // Oona's lesson, beside her grove
+  forge: { x: -10, z: -10, npc: 'smith', from: 2 },    // the parry trial, before Emberridge
+};
+export const TRAIN_TALK = {
+  yardStart: [['Brannoc', 'Good. Three straw dummies. Lock on to one, then chain your light strikes. They will not hit back. Yet.']],
+  shield: [['Brannoc', 'That one carries a shield. Light strikes just bounce off it. Hold a heavy strike and drive it straight through.']],
+  dodge: [['Brannoc', 'Now me. I swing, you dodge. Through the blow, not away from it. Three times.']],
+  husk: [['Brannoc', 'Not bad. Not bad at all. Now...'], ['', 'A low moan drifts in from the edge of the village. Something grey is shambling between the huts.'], ['Brannoc', 'A Husk. The Hush is creeping closer. Let your Kith help you with this one: that is what they are for.']],
+  yardDone: [['Brannoc', 'There. You will do.'], ['Brannoc', 'Here, a few Motes for your first hone. Spend them on that blade, not on Pip\'s threads.']],
+  groveStart: [['Keeper Oona', 'This little one has been napping in my grove all week. Let us see if it will walk with you.'], ['Keeper Oona', 'Tire it out first. Gently! A Kith only hears a Bond Rite once it is below half its strength.']],
+  groveBind: [['Keeper Oona', 'Now. Begin the Bond Rite, and match its song: press as each ring meets the circle.']],
+  groveDone: [['Keeper Oona', 'There. Can you feel it? That is a bond.'], ['Keeper Oona', 'Look after each other, and you will both grow strong.']],
+  forgeStart: [['Brannoc', 'Before you go up that mountain, show me you can turn a blow aside.'], ['Brannoc', 'Tap your guard just as my stave lands. Not before, not after. Three parries.']],
+  forgeDone: [['Brannoc', 'Ha! Kiln would have liked you.'], ['Brannoc', 'Take this Skill Sigil. Spend it on something that keeps you alive up there.']],
+};
+// What the objective line says, and where its map marker points. Before the Shrine of Roots it first
+// suggests training with Brannoc and Oona (it never blocks the way).
+export function objectiveFor(s) {
+  const q = QUESTS[s.quest];
+  if (s.quest === 1 && !s.tips.trialyard) return { text: 'Train with Brannoc in the practice yard by his forge, before you set out.', at: [-15, -5] };
+  if (s.quest === 1 && !s.tips.trialgrove) return { text: 'Learn the Bond Rite from Keeper Oona in her grove.', at: [-6, 15] };
+  return q;
+}
 
 // What the villagers say, chapter by chapter (indexed like G.save.quest). `first` is said once per
 // chapter; Brannoc, Pip and Oona then open their menus, and Maren repeats her `again` line.

@@ -13,6 +13,7 @@ import * as K from './kith.js';
 import { newSave, loadSave, storeSave, wipeSave, loadOpts, importCode } from './save.js';
 import { ART, loadArt } from './art.js';
 import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, CHAT, DOORS, FREED, OPENS, MEMORIES, LULLABY, memoryLines, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
+import { trials } from './trials.js';
 import { clamp, damp, lerp, smooth, angLerp, angDiff, rand, pick, weighted } from './util.js';
 
 // ---------------------------------------------------------------- renderer + scene
@@ -270,7 +271,11 @@ const game = {
     }
     // each villager has something new to say once per chapter (CHAT in data.js), then gets on with business
     const ch = Math.max(1, s.quest), c = CHAT[id] && CHAT[id][ch], heard = id + 'abcdefg'[ch];
-    const menu = { smith: () => ui.smithMenu(), merchant: () => ui.merchantMenu(), keeper: () => ui.keeperMenu() }[id];
+    if (trials.cur && trials.cur.t.npc === id) { ui.say([[id === 'smith' ? 'Brannoc' : 'Keeper Oona', 'Go on. I am watching.']]); return; }
+    let menu = { smith: () => ui.smithMenu(), merchant: () => ui.merchantMenu(), keeper: () => ui.keeperMenu() }[id];
+    // Brannoc and Oona offer their training first while it is available (TRAINING in data.js)
+    const trial = id === 'smith' ? ['forge', 'yard'].find((t) => trials.available(t)) : id === 'keeper' && trials.available('grove') ? 'grove' : null;
+    if (trial && menu) { const shop = menu; menu = () => ui.trialMenu(trial, shop); }
     const first = c && c.first && c.first.filter((l) => !l[2] || LINE_COND[l[2]](s));
     if (first && first.length && !s.tips[heard]) { s.tips[heard] = 1; ui.say(first, () => { game.save(); if (menu) menu(); }); }
     else if (menu) menu();
@@ -372,7 +377,7 @@ const game = {
     });
   },
 };
-G.game = game; G.ui = ui; G.world = world;
+G.game = game; G.ui = ui; G.world = world; G.trials = trials;
 
 function interact() {
   const p = G.player; if (p.dead) { ui.setPrompt(null); return; }
@@ -412,7 +417,7 @@ function frame(now) {
           p.update(pdt); if (G.comp) G.comp.update(pdt);
           for (const e of G.enemies) e.update(dt);
           for (let i = G.enemies.length - 1; i >= 0; i--) if (G.enemies[i].gone) G.enemies.splice(i, 1);
-          updateCombat(dt); G.area.update(dt, G.time); updateLock(raw);
+          updateCombat(dt); G.area.update(dt, G.time); updateLock(raw); trials.update();
           for (const id in G.artCd) if (G.artCd[id] > 0) G.artCd[id] -= pdt;
           if (G.combatT > 0) { G.combatT -= raw; game.tip('fight'); if (G.comp && s.tips.fight && s.playtime > 30) game.tip('art'); }
           if (G.lastHitT > 0) { G.lastHitT -= raw; if (G.lastHitT <= 0) G.lastHit = null; }

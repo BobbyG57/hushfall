@@ -120,10 +120,10 @@ to the tree, which has not happened in sixteen years.
 | --- | --- | --- |
 | Move, zoom, talk | walk from Wren's house to Maren under the tree | [built] tips exist; [words] give Maren the lines |
 | Choose a partner Kith | Maren, the three starters | [built] |
-| Light combo, lock-on, dodge | **Brannoc's practice yard**: three straw dummies, then Brannoc swings a stave you must dodge | [new] dummies are enemies that never attack |
-| Heavy attack | Brannoc: "That dummy has a shield. Hit it hard." | [new] small |
-| Bond Art | first real fight: a lone Husk wanders into the village | [new] scripted spawn; tip [built] |
-| The Bond Rite | **Oona's grove**: a sleepy Mossling to weaken and bond, with Oona talking you through the ring | [new] guided fight |
+| Light combo, lock-on, dodge | **Brannoc's practice yard**: three straw dummies, then Brannoc swings a stave you must dodge | [built] |
+| Heavy attack | Brannoc: "That dummy has a shield. Hit it hard." | [built] |
+| Bond Art | first real fight: a lone Husk wanders into the village at the end of the yard | [built] |
+| The Bond Rite | **Oona's grove**: a sleepy Kith (a Mossling, or a Voltkit or other common if you have one) to weaken and bond, with Oona talking you through the ring | [built] |
 | Waystones and Dewdrops | the Waystone by the village; Pip gives you your first Threads | [built] mostly |
 
 **Turn.** Maren tells Wren about the five shrines. The first is just past the
@@ -160,7 +160,7 @@ Cindermaw.
 - **How it is taught:** the first Brute stands alone on the road from the
   Emberridge Gate Waystone, and a tip about parrying shows when it notices
   you. [built] Before that, Brannoc runs a forge trial: "Parry three of my
-  swings." [new]
+  swings." [built]
 - **Prepare:** Tide beats Ember. Pip mentions the hot springs a short walk
   south of the Emberridge Gate Waystone, where Puddlefins and Shellgars soak.
   [built]
@@ -401,6 +401,14 @@ Roughly from quickest and most valuable to largest.
    one-time tip the first time one notices you.
 4. **Teaching moments** [new]: Brannoc's practice yard, Oona's guided Bond
    Rite, the forge parry trial.
+   **Done 2026-11-22.** `src/trials.js` runs them; places and lines are
+   `TRAINING` and `TRAIN_TALK` in `src/data.js`. Brannoc and Oona offer their
+   training before their usual menu (with "I already know how" to skip it for
+   good), and before the Shrine of Roots the objective suggests the yard, then
+   Oona. Nothing is forced: the shrine is open either way. Rewards: 60 Motes
+   (the yard, exactly a first blade hone), the Kith itself (Oona), and a Skill
+   Sigil (the parry trial, from chapter 2). Walking away, falling or leaving
+   the overworld stops a trial, and it can be started again.
 5. **The world reacts** [new]: music layers, colour returning (lanterns done).
 6. **Sable** [new]: three rival duels.
 7. **The final phase and ending scene** [new]: Kith silenced, Lumen, the

@@ -247,6 +247,23 @@ export function animCreature(M, a, dt) {
   p.body.rotation.x = damp(p.body.rotation.x, bx, 14, dt); if (p.head) p.head.rotation.x = damp(p.head.rotation.x, hx, 10, dt);
 }
 
+// ---------------------------------------------------------------- straw training dummy (Brannoc's practice yard)
+function makeDummy(shield) {
+  const M = new Model('dummy'), wood = 0x6b4a2b, straw = 0xd8b45a, sack = 0xb89a6a;
+  const b = M.piv('body', 0, 0, 0);
+  M.add('cyl', wood, 0.16, 1.0, 0.16, 0, 0.5, 0, b);
+  M.add('cyl', straw, 0.62, 0.85, 0.62, 0, 1.38, 0, b); M.add('box', 0x8a5a34, 0.66, 0.1, 0.66, 0, 1.05, 0, b);
+  M.add('box', wood, 1.5, 0.12, 0.12, 0, 1.6, 0, b);
+  M.add('sph', sack, 0.52, 0.52, 0.52, 0, 2.03, 0, b);
+  for (const sx of [1, -1]) M.add('box', 0x3a2a1a, 0.08, 0.08, 0.04, sx * 0.1, 2.08, 0.25, b);
+  if (shield) { M.add('box', 0x6a4a2a, 0.95, 1.05, 0.12, 0, 1.4, 0.42, b); M.add('box', 0xbfc7d0, 0.5, 0.62, 0.06, 0, 1.4, 0.5, b, 0.2); }
+  M.height = 2.3; return M;
+}
+function animDummy(M, a, dt) {
+  const b = M.p.body, tx = a.pose === 'dead' ? -1.4 : 0, tz = a.pose === 'hurt' ? Math.sin(a.t * 30) * 0.22 : 0;
+  b.rotation.x = damp(b.rotation.x, tx, 10, dt); b.rotation.z = damp(b.rotation.z, tz, 18, dt);
+}
+
 // ---------------------------------------------------------------- spitter (rooted turret plant)
 export function makeSpitter(col, scale = 1) {
   const M = new Model('spitter'); const dk = 0x2a2634, dk2 = 0x1c1924;
@@ -508,6 +525,7 @@ export function animate(M, a, dt) {
     case 'creature': animCreature(M, a, dt); break;
     case 'spitter': animSpitter(M, a, dt); break;
     case 'wraith': animWraith(M, a, dt); break;
+    case 'dummy': animDummy(M, a, dt); break;
   }
   M.tick(dt);
 }
@@ -539,6 +557,9 @@ export function makeEnemyModel(type, el, elite) {
     case 'skitter': return makeCreature({ body: 'quad', size: elite ? 0.85 : 0.62, wide: 1, c1: dk, c2: dk2, c3: c, spikes: 1, tail: 'stub', eyeGlow: 1 });
     case 'spitter': return makeSpitter(c, elite ? 1.35 : 1);
     case 'wraith': return makeWraith(c, { scale: elite ? 1.35 : 1 });
+    case 'dummy': return makeDummy(false);
+    case 'shielddummy': return makeDummy(true);
+    case 'spar': return spriteFor('npc.smith', { height: 1.9 }) || makeHumanoid({ colors: { body: 0x7a4a2a, head: 0xc89a78, limb: 0x8a5a3a, accent: 0x3a3340, hand: 0xc89a78 }, eyes: 0x1a1a22, eyeEm: 0, belt: 1, weapon: 'club' });
   }
   return makeHumanoid({ colors: { body: dk, head: dk2, limb: mid, accent: c }, eyes: c });
 }

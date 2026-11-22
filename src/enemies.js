@@ -80,7 +80,7 @@ export class Enemy {
     if (this.status.weak > 0) mult *= 1.4;
     if (o.kith && G.run && G.run.boons.kindred) mult *= 1 + 0.4 * G.run.boons.kindred;
     let blocked = false;
-    if (this.def.ai === 'shield' && this.stag <= 0 && !(this.status.freeze > 0) && o.from) {
+    if ((this.def.ai === 'shield' || this.def.shield) && this.stag <= 0 && !(this.status.freeze > 0) && o.from) {
       const a = Math.atan2(o.from.x - this.pos.x, o.from.z - this.pos.z);
       if (Math.abs(angDiff(this.yaw, a)) < 1.15) { if (o.guardBreak) { this.stagger(1.5); fx.dmgNum(this.top(), 'GUARD BREAK', 'crit'); } else { blocked = true; mult *= 0.15; } }
     }
@@ -169,6 +169,7 @@ export class Enemy {
 
   think(dt) {
     const p = G.player, d0 = this.def, dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z, d = Math.hypot(dx, dz);
+    if (d0.ai === 'dummy') { if (d0.shield) this.faceP(dt, 1.4); return; }   // training dummies just stand there
     if (!this.aggro) {
       if (!p.dead && !this.passive && d < this.sight && Math.abs(p.pos.y - this.pos.y) < 7) this.alert();
       else { this.wander(dt); return; }
@@ -179,6 +180,12 @@ export class Enemy {
     this.cd -= dt; this.faceP(dt, 7);
     const nx = dx / (d || 1), nz = dz / (d || 1), reach = d - p.radius - this.radius;
     const ai = d0.ai;
+    if (ai === 'spar') {   // Brannoc sparring: close in, then swing on a steady beat
+      const want = d0.range;
+      if (reach > want) this.walk(nx, nz, this.speed); else if (reach < want * 0.4) this.walk(-nx, -nz, this.speed * 0.5);
+      if (reach <= want + 0.8 && this.cd <= 0) this.start(this.spar());
+      return;
+    }
     if (ai === 'ranged') {
       if (this.speed > 0) { if (reach < 6) this.walk(-nx, -nz, this.speed); else if (reach > 13) this.walk(nx, nz, this.speed); else this.walk(-nz * this.strafe, nx * this.strafe, this.speed * 0.5); if (Math.random() < dt * 0.25) this.strafe *= -1; }
       if (this.cd <= 0 && reach < 22) this.start(this.spit());
@@ -213,6 +220,20 @@ export class Enemy {
     this.pose('h1', 0.22); this.push(7.5); audio.sfx('swing', 0.6); yield 0.12; this.hitArc(R, 130, this.dmg); yield 0.4;
     if (two) { this.tracking = true; this.pose('charge'); yield 0.32; this.tracking = false; this.pose('h2', 0.22); this.push(7); audio.sfx('swing', 0.6); yield 0.12; this.hitArc(R, 130, this.dmg); yield 0.4; }
     this.pose(null); yield 0.3; this.cd = rand(1.0, 2.2);
+  }
+  // Brannoc's sparring swing (training). Reports each swing that could have landed to this.onSpar.
+  *spar() {
+    this.pose('charge'); this.tele(); this.tracking = true; yield this.sparWind ? this.sparWind() : 0.65; this.tracking = false;
+    const p = G.player, R = 2.9, reach = this.inArc(R + 1.6, 170);   // in reach as the swing starts (a dodge may carry you out)
+    this.pose('h1', 0.22); this.push(6); audio.sfx('swing', 0.6); yield 0.12;
+    const dodging = p.state === 'dodge' && p.t < 0.3, res = this.hitArc(R, 140, this.dmg, { knock: 4 });
+    if (this.onSpar && reach) this.onSpar(res, res === false && dodging);
+    yield 0.5; this.pose(null); yield 0.35; this.cd = rand(0.7, 1.3);
+  }
+  inArc(range, arcDeg) {
+    const p = G.player, dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z, d = Math.hypot(dx, dz);
+    if (p.dead || d - p.radius > range || Math.abs(p.pos.y - this.pos.y) > 2.2 + this.radius) return false;
+    return d <= 1 || Math.abs(angDiff(this.yaw, Math.atan2(dx, dz))) <= arcDeg * Math.PI / 360;
   }
   *pounce() {
     this.pose('charge'); this.tele(); this.tracking = true; yield 0.4; this.tracking = false;

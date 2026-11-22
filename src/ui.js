@@ -3,7 +3,7 @@ import { G } from './state.js';
 import { input } from './input.js';
 import { audio } from './audio.js';
 import { fx } from './fx.js';
-import { MEMORIES, LULLABY, EL, KITH, ARTS, SKILLS, RARITY, QUESTS, WAYSTONES, SHRINES, KTABLE, BIOME, VEIL_REQ, PASS, kithName, isEvolved, xpNext, kithXpNext, bladeCost, vitCost, flaskCost, MAX_BLADE, MAX_VIT, MAX_FLASK, STARTERS } from './data.js';
+import { MEMORIES, LULLABY, objectiveFor, EL, KITH, ARTS, SKILLS, RARITY, QUESTS, WAYSTONES, SHRINES, KTABLE, BIOME, VEIL_REQ, PASS, kithName, isEvolved, xpNext, kithXpNext, bladeCost, vitCost, flaskCost, MAX_BLADE, MAX_VIT, MAX_FLASK, STARTERS } from './data.js';
 import { partyList, activeKith, partyMax, artCooldown, kithPower, summonActive } from './kith.js';
 import { storeOpts, loadSave, storeSave, exportCode, importCode, transferLink } from './save.js';
 import { clamp } from './util.js';
@@ -185,7 +185,7 @@ export const ui = {
         { label: 'Graphics: ' + (G.opts.quality ? 'High' : 'Fast'), act: () => { G.opts.quality = G.opts.quality ? 0 : 1; storeOpts(G.opts); G.game.applyQuality(); } },
         { label: 'Toggle fullscreen', act: () => { if (document.fullscreenElement) document.exitFullscreen(); else { const r = document.documentElement.requestFullscreen(); if (r && r.catch) r.catch(() => this.toast('Click this option with the mouse, or press Ctrl+Cmd+F, to go fullscreen.')); } } },
         { label: 'Quit to title', act: () => this.confirm('Save and return to the title screen?', () => { this.closeMenu(true); G.game.quit(); }) },
-      ], side: () => `<h3>Level ${s.level}</h3><table><tr><td>Health</td><td>${Math.ceil(p.hp)} / ${p.maxHp}</td></tr><tr><td>Sword power</td><td>${p.atkPow.toFixed(1)} (blade +${s.blade})</td></tr><tr><td>Experience</td><td>${Math.floor(s.xp)} / ${xpNext(s.level)}</td></tr><tr><td>Bond Threads</td><td>${s.threads}</td></tr><tr><td>Shrines restored</td><td>${Object.keys(s.shrines).length} / 5</td></tr><tr><td>Kith bonded</td><td>${Object.values(s.dex).filter((v) => v === 2).length} / ${Object.keys(KITH).length}</td></tr><tr><td>Echo Shards</td><td>${Object.keys(s.shards).length} / 16</td></tr><tr><td>Hush Rifts sealed</td><td>${Object.keys(s.rifts).length} / 5</td></tr><tr><td>Abyss record</td><td>${s.abyssBest ? 'Floor ' + s.abyssBest : 'None'}</td></tr><tr><td>Time played</td><td>${fmtTime(s.playtime)}</td></tr></table><p style="margin-top:10px"><b>Objective:</b> ${QUESTS[s.quest].text}</p>` },
+      ], side: () => `<h3>Level ${s.level}</h3><table><tr><td>Health</td><td>${Math.ceil(p.hp)} / ${p.maxHp}</td></tr><tr><td>Sword power</td><td>${p.atkPow.toFixed(1)} (blade +${s.blade})</td></tr><tr><td>Experience</td><td>${Math.floor(s.xp)} / ${xpNext(s.level)}</td></tr><tr><td>Bond Threads</td><td>${s.threads}</td></tr><tr><td>Shrines restored</td><td>${Object.keys(s.shrines).length} / 5</td></tr><tr><td>Kith bonded</td><td>${Object.values(s.dex).filter((v) => v === 2).length} / ${Object.keys(KITH).length}</td></tr><tr><td>Echo Shards</td><td>${Object.keys(s.shards).length} / 16</td></tr><tr><td>Hush Rifts sealed</td><td>${Object.keys(s.rifts).length} / 5</td></tr><tr><td>Abyss record</td><td>${s.abyssBest ? 'Floor ' + s.abyssBest : 'None'}</td></tr><tr><td>Time played</td><td>${fmtTime(s.playtime)}</td></tr></table><p style="margin-top:10px"><b>Objective:</b> ${objectiveFor(s).text}</p>` },
       { name: 'Skills', title: 'Blade Skills', items: () => SKILLS.map((k) => ({ label: k.name, right: s.skills[k.id] ? 'Learned' : `${k.cost} sigil${k.cost > 1 ? 's' : ''}`, disabled: !!s.skills[k.id] || s.sigils < k.cost, desc: k.desc, act: () => { s.sigils -= k.cost; s.skills[k.id] = 1; p.recalc(); audio.sfx('level'); this.toast(`Learned ${k.name}`, 'gold'); } })),
         side: (it) => `<h3>${it ? it.label : ''}</h3><p>${it ? it.desc : ''}</p><p>Skill Sigils: <b>${s.sigils}</b></p><p style="color:var(--dim)">Earn sigils by levelling up, finding Echo Shards, and sealing Hush Rifts.</p>` },
       { name: 'Kith', title: `Your Kith (party ${s.party.length} / ${partyMax()})`, items: () => this.kithItems(), side: (it) => this.kithSide(it && it.k) },
@@ -226,6 +226,19 @@ export const ui = {
       ];
     } });
   },
+  // Brannoc's or Oona's training, offered before their usual menu (see trials.js)
+  trialMenu(id, shop) {
+    const T = {
+      yard: { who: 'Brannoc the Smith', go: 'Train in the practice yard', desc: 'Straw dummies, a shielded dummy, and Brannoc\'s stave to dodge. Brannoc pays 60 Motes for your first hone.', shop: 'Browse the forge' },
+      forge: { who: 'Brannoc the Smith', go: 'The parry trial', desc: 'Parry three of Brannoc\'s swings. He gives a Skill Sigil for it.', shop: 'Browse the forge' },
+      grove: { who: 'Keeper Oona\'s Grove', go: 'Learn the Bond Rite', desc: 'Oona helps you bond with a sleepy Kith from her grove. She provides the Bond Thread.', shop: 'Visit the grove' },
+    }[id];
+    this.openMenu({ title: T.who, items: () => [
+      { label: T.go, desc: T.desc, act: () => { this.closeMenu(true); G.trials.start(id); } },
+      { label: T.shop, desc: '', act: () => { this.closeMenu(true); shop(); } },
+      { label: 'I already know how', desc: 'Skip this training. It will not be offered again.', act: () => { G.save.tips['trial' + id] = 1; this.closeMenu(true); G.game.save(); shop(); } },
+    ] });
+  },
   keeperMenu() { this.openMenu({ tabs: [{ name: 'Kith', title: `Keeper Oona's Grove (party ${G.save.party.length} / ${partyMax()})`, items: () => this.kithItems(), side: (it) => this.kithSide(it && it.k) }, this.dexTab()] }); },
   starterMenu(cb) {
     this.openMenu({ title: 'Choose your first Kith', noCancel: true, items: () => STARTERS.map((id) => ({ id, label: KITH[id].name, right: EL[KITH[id].el].glyph + ' ' + EL[KITH[id].el].name, act: () => { this.closeMenu(true); cb(id); } })),
@@ -263,7 +276,7 @@ export const ui = {
 
   // ---------------------------------------------------------------- map
   icons(c, toX, toZ, big) {
-    const s = G.save, q = QUESTS[s.quest].at;
+    const s = G.save, q = objectiveFor(s).at;
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `${big ? 16 : 13}px sans-serif`;
     for (const p of G.world.pois) {
       const x = toX(p.x), y = toZ(p.z); if (x < -10 || y < -10 || x > c.canvas.width + 10 || y > c.canvas.height + 10) continue;
@@ -316,7 +329,8 @@ export const ui = {
     this.xpFill.style.width = clamp(s.xp / xpNext(s.level) * 100, 0, 100) + '%';
     let fl = ''; for (let i = 0; i < p.maxPotions; i++) fl += `<b${i < p.potions ? '' : ' class="e"'}></b>`; set(e.flask, fl);
     set(e.motes, `◆ ${s.motes} &nbsp; ⌇ ${s.threads}${s.sigils ? ` &nbsp; ✦ ${s.sigils}` : ''}`);
-    set(e.quest, G.run ? `<small>The Abyss</small>Floor ${G.run.floor}. Record: ${s.abyssBest || 'none'}` : `<small>Objective</small>${QUESTS[s.quest].text}`);
+    const tr = G.trials && G.trials.objective();
+    set(e.quest, G.run ? `<small>The Abyss</small>Floor ${G.run.floor}. Record: ${s.abyssBest || 'none'}` : tr ? `<small>Training</small>${tr}` : `<small>Objective</small>${objectiveFor(s).text}`);
     // party chips
     const party = partyList(), act = activeKith(), sig = party.map((k) => k.id + ':' + k.level + (k === act ? '*' : '')).join(',') + input.usingPad;
     if (sig !== this.chipSig) {
