@@ -12,7 +12,7 @@ import { updateCombat, clearCombat, dropMotes, after } from './combat.js';
 import * as K from './kith.js';
 import { newSave, loadSave, storeSave, wipeSave, loadOpts, importCode } from './save.js';
 import { ART, loadArt } from './art.js';
-import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, CHAT, DOORS, FREED, OPENS, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
+import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, CHAT, DOORS, FREED, OPENS, MEMORIES, LULLABY, memoryLines, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
 import { clamp, damp, lerp, smooth, angLerp, angDiff, rand, pick, weighted } from './util.js';
 
 // ---------------------------------------------------------------- renderer + scene
@@ -282,7 +282,12 @@ const game = {
   },
   takeShard(sh) {
     const s = G.save; s.shards[sh.id] = 1; s.sigils++; audio.sfx('chest'); fx.column({ x: sh.x, y: sh.y, z: sh.z }, 0x9adfff, 8, 60);
-    ui.toast(`Echo Shard ${Object.keys(s.shards).length} of 16. +1 Skill Sigil`, 'gold', 4); game.save();
+    const total = Object.keys(s.shards).length, m = (MEMORIES[sh.biome] || [])[(world.memoriesFound()[sh.biome] || 1) - 1];
+    ui.toast(`Echo Shard ${total} of 16. +1 Skill Sigil`, 'gold', 4); game.save();
+    // each shard holds a memory from before the Hush; the last one found adds Maren's lullaby
+    const lines = m ? memoryLines(m) : [];
+    if (total >= 16) lines.push(...memoryLines(LULLABY));
+    if (lines.length) ui.say(lines, null, 'memory');
   },
 
   enterShrine(id) {

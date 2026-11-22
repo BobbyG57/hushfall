@@ -321,10 +321,13 @@ export const world = {
         const id = 's' + n++, grp = new THREE.Group(); grp.position.set(x, h, z); g.add(grp);
         const gem = mesh(PG.oct, glow(0xd8f6ff), 0.7, 1.1, 0.7, 0, 0.9, 0, grp, false);
         const bm = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: 0x9adfff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false })); grp.add(bm);
-        this.shards.push({ id, x, z, y: h, grp, gem, taken: false }); placed++;
+        this.shards.push({ id, biome, x, z, y: h, grp, gem, taken: false }); placed++;
       }
     }
   },
+
+  // how many Echo Shard memories have been found in each region (they unlock in story order)
+  memoriesFound() { const s = G.save, n = {}; for (const sh of this.shards) if (s && s.shards[sh.id]) n[sh.biome] = (n[sh.biome] || 0) + 1; return n; },
 
   // sync world objects with the save (called on load and after progress)
   refresh() {

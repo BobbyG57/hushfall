@@ -282,6 +282,97 @@ export const OPENS = {
   gales: 'To the west, the veil over Gloamwood tears open. Only one lantern on the Tree is still dark.',
 };
 
+// Echo Shards are memories from before the Hush (STORY.md, section 9). Each region's shards tell
+// one keeper's side, in order, whichever shard the player happens to find first. Finding all 16
+// adds LULLABY. The first line of each memory is narration.
+const mem = (title, ...lines) => ({ title, lines });
+export const MEMORIES = {
+  meadow: [
+    mem('The Lesson',
+      ['', 'Sunlight, and a song you have never heard. Under the Lantern Tree, a young woman with a stern face is teaching a boy to hold a wooden sword.'],
+      ['Maren', 'Again, Aurel. Lower. You swing like you are apologising to the air.'],
+      ['', 'A small black fox pounces on the practice sword and runs off with it. The boy laughs until he cannot breathe.'],
+      ['Aurel', 'Lumen! Maren, it is not my fault. He is a Kith of very strong opinions.']),
+    mem('The Last Festival',
+      ['', 'Lanterns on every branch. All five keepers of the Choir are here, and the whole valley is singing along.'],
+      ['Brannoc', 'Kiln, put the drum down. Kiln. That is not a drum, that is the mayor.'],
+      ['', 'Maressa sings the last verse alone. Skarn, who never cries, insists there is something in his eye.'],
+      ['Maren', 'Remember this, all of you. Whatever comes.']),
+    mem('The Long Note',
+      ['', 'Night. The ground shakes, and from deep below comes a sound like a held breath that will not end.'],
+      ['Aurel', 'Something is wrong down there. The Undersong is waking. Lumen, stay with me. Lumen!'],
+      ['', 'The black fox looks back at him once. Then it runs into the dark, toward the sound, and the sound goes quiet.']),
+    mem('Among the Roots',
+      ['', 'The same night. For the first time in its history, the valley is completely silent.'],
+      ['', 'Maren kneels among the roots of the Lantern Tree. A baby lies there, wrapped in nothing but light, humming one soft note.'],
+      ['Maren', 'Hello, little one. Where did you come from? No. Never mind. You are safe now.']),
+  ],
+  ember: [
+    mem('The Forge',
+      ['', 'Heat and hammer-song. A young Brannoc works the bellows while a round, glowing Kith breathes on the coals to keep them bright.'],
+      ['Brannoc', 'Hotter, Kiln. There. Hear that ring? That is a blade that will never break.'],
+      ['', 'Kiln hums with pride, and the whole mountain hums with it.']),
+    mem('The Night Brannoc Ran',
+      ['', 'The Hush rolls up the mountain like fog. Wherever it touches, the songs go out like candles.'],
+      ['Brannoc', 'Kiln, come on! Leave the forge, there is no time!'],
+      ['', 'Kiln will not leave the fire. It has kept it lit for a hundred years. Brannoc runs, and tells himself he will come back.']),
+    mem('Kiln Waits',
+      ['', 'Days. Weeks. Years. The forge never goes out.'],
+      ['', 'Every evening, Kiln looks down the mountain path toward Lanternrest. The Hush grows thicker, and Kiln grows bigger, hotter, angrier.'],
+      ['', 'It forgets its own name. It never forgets to wait.']),
+  ],
+  tide: [
+    mem('The Cantor',
+      ['', 'A summer evening on the mere. A woman stands on the water itself, singing, and every reed and ripple sings back to her.'],
+      ['Maressa', 'Every song is a memory, Aurel. Someone, somewhere, kept it so it would not be lost. That is all singing is.']),
+    mem('Stop Singing',
+      ['', 'After the Long Note. Aurel stands at the edge of the mere, thin and grey, holding something dark in his hands.'],
+      ['Aurel', 'Please stop, Maressa. Every song in this valley sings his name. I cannot bear it.'],
+      ['Maressa', 'Then let it hurt. That is what it means to have loved him.']),
+    mem('Into the Water',
+      ['', 'The crown is on his head now. The Hush pours across the mere, and the reeds fall silent one by one.'],
+      ['', 'Maressa gathers up her voice, the last song left, and walks down into the water so the crown cannot take it.'],
+      ['Maressa', 'Someone will come looking for it. I will keep it safe until then.']),
+  ],
+  storm: [
+    mem('Two Boys on the Stair',
+      ['', 'Two boys race up the thousand steps of Stormreach in the rain. One of them has a black fox riding on his shoulders.'],
+      ['Skarn', 'I won!'],
+      ['Aurel', 'Lumen was carrying me. That does not count.'],
+      ['Skarn', 'Fine. Then I swear it: wherever you go, I go first. Shield of the Blade, forever.']),
+    mem('The Oath',
+      ['', 'Years later. Skarn kneels before the Choir with a spear across his knees and lightning in his hair.'],
+      ['Skarn', 'I am the Stormcaller, keeper of Gales, and the Blade\'s shield. I will stand beside Aurel until the sky falls.'],
+      ['', 'Aurel, mortified, tries to make him stand up. Skarn refuses for nearly an hour.']),
+    mem('Take It Off',
+      ['', 'The Hollow Court, the night the Hush fell. Aurel sits on a throne of black wood and does not look up.'],
+      ['Skarn', 'Take it off, Aurel. Please. This is not what Lumen would want.'],
+      ['Aurel', 'You swore to stand beside me, Skarn. So stand.'],
+      ['', 'And Skarn, who has never broken a promise in his life, stands.']),
+  ],
+  gloam: [
+    mem('Into the Dark',
+      ['', 'A darkness that sings backwards. A small black fox runs through it, toward a sound that is swallowing the world.'],
+      ['', 'Lumen cannot stop the Long Note. So Lumen becomes the part of it that holds still, so the rest of the world can go on singing.'],
+      ['', 'Far above, a boy is calling its name. It cannot answer. Not yet.']),
+    mem('The Bottom of the World',
+      ['', 'Aurel walks the Undersong, where the silence lives, looking for Lumen. He does not find him.'],
+      ['', 'What he finds instead is a crown, black and light as ash, resting on nothing.'],
+      ['Aurel', 'If I cannot have him back, then let me stop hearing him.']),
+    mem('The Crown',
+      ['', 'He puts it on.'],
+      ['', 'The song of Vael stops, all at once, from the mountains to the mere. In the silence, Aurel finally sleeps.'],
+      ['', 'At the edge of the Gloam, a black fox opens its eyes and starts walking home.']),
+  ],
+};
+export const LULLABY = mem('Lullaby',
+  ['', 'Lanternrest, a few days after the Hush. No birdsong, no wind in the leaves. Nothing.'],
+  ['', 'Maren sits under the Lantern Tree with the baby in her arms and sings, very quietly, the only song she has left.'],
+  ['Maren', 'You will not remember this, little one. But someone should hear it. Someone should keep it.'],
+  ['', 'The baby hums the last note back to her, perfectly. Maren laughs for the first time in days. Above them, one lantern flickers into light.']);
+// a memory as dialogue: its title rides on the first line
+export const memoryLines = (m) => m.lines.map((l, i) => (i === 0 ? ['Memory: ' + m.title, l[1]] : l));
+
 // What the villagers say, chapter by chapter (indexed like G.save.quest). `first` is said once per
 // chapter; Brannoc, Pip and Oona then open their menus, and Maren repeats her `again` line.
 const ch = (first, again) => ({ first, again });

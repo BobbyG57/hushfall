@@ -3,7 +3,7 @@ import { G } from './state.js';
 import { input } from './input.js';
 import { audio } from './audio.js';
 import { fx } from './fx.js';
-import { EL, KITH, ARTS, SKILLS, RARITY, QUESTS, WAYSTONES, SHRINES, KTABLE, BIOME, VEIL_REQ, PASS, kithName, isEvolved, xpNext, kithXpNext, bladeCost, vitCost, flaskCost, MAX_BLADE, MAX_VIT, MAX_FLASK, STARTERS } from './data.js';
+import { MEMORIES, LULLABY, EL, KITH, ARTS, SKILLS, RARITY, QUESTS, WAYSTONES, SHRINES, KTABLE, BIOME, VEIL_REQ, PASS, kithName, isEvolved, xpNext, kithXpNext, bladeCost, vitCost, flaskCost, MAX_BLADE, MAX_VIT, MAX_FLASK, STARTERS } from './data.js';
 import { partyList, activeKith, partyMax, artCooldown, kithPower, summonActive } from './kith.js';
 import { storeOpts, loadSave, storeSave, exportCode, importCode, transferLink } from './save.js';
 import { clamp } from './util.js';
@@ -46,7 +46,7 @@ export const ui = {
   error(msg) { this.el.err.textContent = msg; },
 
   // ---------------------------------------------------------------- dialogue
-  say(lines, cb) { this.dlg = { lines, i: 0, n: 0, cb, back: G.atTitle ? 'title' : 'play' }; G.mode = 'dialog'; cls(this.el.dialog, 'hidden', false); input.clear(); this.dlgLine(); },
+  say(lines, cb, style) { this.dlg = { lines, i: 0, n: 0, cb, back: G.atTitle ? 'title' : 'play' }; G.mode = 'dialog'; cls(this.el.dialog, 'hidden', false); cls(this.el.dialog, 'memory', style === 'memory'); input.clear(); this.dlgLine(); },
   dlgLine() { const d = this.dlg, l = d.lines[d.i]; d.n = 0; this.el.dwho.textContent = l[0]; this.el.dwho.style.display = l[0] ? '' : 'none'; this.el.dtext.textContent = ''; set(this.el.dnext, input.glyph('confirm')); },
   updateDialog(dt) {
     const d = this.dlg, text = d.lines[d.i][1];
@@ -153,6 +153,19 @@ export const ui = {
         : { label: 'Join the party', disabled: s.party.length >= partyMax() || busy, desc: `Party size ${s.party.length} / ${partyMax()}`, act: () => { s.party.push(k.id); if (!G.comp) summonActive(); this.closeMenu(); } },
     ] });
   },
+  // Echo Shard memories found so far, to read again (see MEMORIES in data.js)
+  memoryTab() {
+    const regions = ['meadow', 'ember', 'tide', 'storm', 'gloam'];
+    return { name: 'Memories', title: 'Echo Shard memories', items: () => {
+      const found = G.world.memoriesFound(), total = Object.keys(G.save.shards).length, list = [];
+      for (const b of regions) MEMORIES[b].forEach((m, i) => { const has = i < (found[b] || 0); list.push({ m: has ? m : null, label: has ? m.title : '? ? ?', right: BIOME[b].name }); });
+      list.push({ m: total >= 16 ? LULLABY : null, label: total >= 16 ? LULLABY.title : '? ? ?', right: 'All 16 shards' });
+      return list;
+    },
+    side: (it) => (it && it.m
+      ? `<h3>${it.m.title}</h3>` + it.m.lines.map(([who, t]) => `<p>${who ? `<b>${who}:</b> ` : '<i>'}${t}${who ? '' : '</i>'}</p>`).join('')
+      : `<p>Not found yet.</p><p style="color:var(--dim)">Each region's Echo Shards hold its own story, and the memories come back in order. You have found ${Object.keys(G.save.shards).length} of 16 shards.</p>`) };
+  },
   dexTab() {
     const where = (id) => Object.keys(KTABLE).filter((b) => KTABLE[b].some((e) => e[0] === id)).map((b) => BIOME[b].name).join(', ');
     return { name: 'Kithdex', title: 'Kithdex', items: () => Object.keys(KITH).map((id) => { const st = G.save.dex[id] || 0, sp = KITH[id]; return { id, st, label: st ? sp.name : '? ? ?', right: st === 2 ? 'Bonded' : st === 1 ? 'Seen' : '' }; }),
@@ -178,6 +191,7 @@ export const ui = {
       { name: 'Kith', title: `Your Kith (party ${s.party.length} / ${partyMax()})`, items: () => this.kithItems(), side: (it) => this.kithSide(it && it.k) },
       this.dexTab(),
       { name: 'Map', title: 'Vael', items: () => [], side: () => '<div style="display:flex;gap:16px"><canvas id="mapc" width="460" height="460"></canvas><div style="font-size:13px;line-height:1.9"><span style="color:#6ff0ff">◆</span> Waystone<br><span style="color:#fff">▲</span> Shrine<br><span style="color:#b06cff">✦</span> Hush Rift<br><span style="color:#8af0a0">●</span> Kith grove<br><span style="color:#ffd98a">◎</span> Objective<br><span style="color:#ff5a6a">▼</span> You</div></div>', after: () => this.drawMap() },
+      this.memoryTab(),
       { name: 'Controls', title: 'Controls', items: () => [], side: () => this.controlsHtml() },
     ] });
   },

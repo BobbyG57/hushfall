@@ -344,9 +344,11 @@ Small touches that make the story feel real as you progress:
 
 ## 9. Telling the backstory
 
-- **Echo Shards are memories.** Each of the 16 plays two or three lines from
-  before the Hush when you pick it up. They are grouped by region, so each set
-  tells one keeper's side. [words] + [new] small (shards already exist)
+- **Echo Shards are memories.** [built] Each of the 16 plays a short scene
+  from before the Hush when you pick it up. They are grouped by region, so each
+  set tells one keeper's side, and within a region they always come back in
+  story order, whichever shard you find first. Found memories can be read again
+  under Memories in the pause menu.
   - Meadow (4): Maren teaching young Aurel and Lumen; the Choir's last
     festival; the Long Note; finding the baby in the roots.
   - Emberridge (3): Brannoc and Kiln at the forge; the night Brannoc ran; Kiln
@@ -357,7 +359,9 @@ Small touches that make the story feel real as you progress:
     to take the crown off.
   - Gloamwood (3): Lumen going into the dark; Aurel at the edge of the
     Undersong; the crown.
-  - All 16: a bonus memory after the ending.
+  - All 16: a bonus memory, "Lullaby": Maren singing to the baby in the
+    silence, the baby humming the last note back, and one lantern lighting.
+    It plays straight after the 16th shard's own memory, whenever that is.
 - **Boss lines.** Each keeper gets one line when the fight starts and one when
   freed. [words]
 - **Hush Rifts** are where the Undersong leaks up. Sealing them is mopping up
@@ -380,6 +384,9 @@ Roughly from quickest and most valuable to largest.
    (the stray Cinderpup, Pip's hot-spring rumour, Sable) are left out until
    those steps land.
 2. **Echo Shard memories** [words + small]: 16 short memories on pickup.
+   **Done 2026-11-22.** The text is `MEMORIES` and `LULLABY` in `src/data.js`.
+   Memories show in the dialogue box with their title and pale blue italics,
+   and there is a Memories tab in the pause menu.
 3. **Counter Kith and enemy introductions** [tweak]: a Cinderpup by the forge,
    Puddlefin in Emberridge, first Brute, Warder and Wraith on their own.
 4. **Teaching moments** [new]: Brannoc's practice yard, Oona's guided Bond

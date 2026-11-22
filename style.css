@@ -69,6 +69,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #dialog{position:absolute;left:50%;bottom:50px;transform:translateX(-50%);width:min(820px,84vw);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 24px 22px;box-shadow:0 10px 40px rgba(0,0,0,.6)}
 #dwho{font:700 14px var(--ui);color:var(--gold);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
 #dtext{font:20px/1.5 var(--serif);min-height:60px}
+#dialog.memory{border-color:#9adfff;box-shadow:0 0 30px rgba(154,223,255,.25)}
+#dialog.memory #dtext{font-style:italic;color:#d8f6ff}
 #dnext{position:absolute;right:16px;bottom:8px;font-size:12px;color:var(--dim)}
 
 /* menu */
