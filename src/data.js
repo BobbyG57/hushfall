@@ -283,8 +283,8 @@ export const FREED = {
     ['', 'Skarn lowers his spear and steps aside. The north wind falls quiet.'],
   ],
   hollow: [
-    ['', 'The Hollow Crown cracks.'],
-    ['', 'From the shadows at the edge of the court, a black fox steps into the light.'],
+    ['', 'The Hollow Crown cracks, and falls.'],
+    ['', 'The black fox that sang beside you pads across the court, to the king on his knees.'],
     ['The Hollow King', 'Lumen?'],
     ['', 'The fox presses its head against his hand, the way your Kith did on the night you met.'],
     ['Aurel', 'I wanted to stop missing you. So I made the whole world forget, and I forgot myself with it.'],

@@ -228,18 +228,25 @@ appearing at the edge of the screen.
 - **Sable's last duel** happens at the Court gate (the doors stay shut until
   it is won). Sable loses, finally admits missing the people the Long Note
   took, gives Wren 5 Bond Threads, and steps back into the dusk. [built]
-- **The Hollow King, three phases:** [built] phases exist; [new] phase 3 twist
+- **The Hollow King, three phases:** [built]
   1. **Swordsman:** Aurel fights with a moveset like Wren's. A parry exam.
   2. **Crown:** Gloam storms and summons. A dodging exam.
   3. **The silence:** the crown silences your Kith. Bond Arts stop working and
      the music cuts out. You fight alone, badly outmatched. Then your Kith sing
      anyway: the Bond gauge fills by itself and the **Unison Burst** button
      lights up. Lumen appears beside Wren and joins in. The burst breaks the
-     crown.
+     crown. In the game: at a third of his health the court greys and goes
+     silent, your Kith vanishes and Bond Arts fail, and the King cannot fall.
+     After ten seconds (sooner, but never under three, if you are badly hurt)
+     the music returns as the full song, your Kith comes back, the gauge
+     fills, and Lumen appears. Your Unison Burst breaks the crown and ends the
+     fight; Lumen runs to the King, and fades into the light with him when
+     the ending closes. Only in the Hollow Court, not the King's Abyss echoes.
 - **Ending:** Aurel sees Lumen and remembers. He sets the crown down and fades
   into the returning song with his friend. Wren hears Vael's song for the
   first time, and finally understands what Wren is: the last note of it, kept
-  safe in the Lantern Tree. Every lantern lights. [words] + [new] scene
+  safe in the Lantern Tree. Every lantern lights. [built] The ending plays
+  over the full song of Vael.
 
 ### After the ending
 
@@ -429,6 +436,9 @@ Roughly from quickest and most valuable to largest.
    running off calls a duel off, and Sable waits to try again.
 7. **The final phase and ending scene** [new]: Kith silenced, Lumen, the
    crown breaking.
+   **Done 2026-11-22.** `src/finale.js` runs it, started from the King's
+   phase change in `enemies.js`. The music for it is the `finale` mood (the
+   Kith singing, in battle) and the `song` mood (the ending) in `audio.js`.
 8. **After the ending** [new small]: bond with Lumen, the bonus memory.
 
 Steps 1 to 3 would already make the game feel like it has a story. Steps 4

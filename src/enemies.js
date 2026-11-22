@@ -86,7 +86,8 @@ export class Enemy {
     }
     if (o.crit) mult *= 1.7;
     const n = Math.max(1, Math.round(dmg * mult * rand(0.93, 1.07)));
-    this.hp -= n; this.alert();
+    this.hp -= n; if (this.hpFloor && this.hp < this.hpFloor) this.hp = this.hpFloor;   // hpFloor: the King in the crown's silence
+    this.alert();
     fx.dmgNum(this.top(), n, blocked ? 'weak' : o.crit ? 'crit' : mult >= 1.3 ? 'strong' : mult < 0.8 ? 'weak' : '');
     this.model.flash = 1; this.model.flashCol.set(0xffffff);
     if (blocked) audio.sfx('clang'); else if (!o.quiet) { audio.sfx((o.poise || 0) > 25 ? 'hitHeavy' : 'hit'); if (o.crit) audio.sfx('crit'); }
@@ -274,7 +275,7 @@ export class Enemy {
     G.combatT = 3; this.cd -= dt; this.faceP(dt, 5);
     const dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z, d = Math.hypot(dx, dz), nx = dx / (d || 1), nz = dz / (d || 1), reach = d - this.radius - p.radius;
     const hk = this.hp / this.maxHp, ph = this.bossId === 'king' ? (hk < 0.33 ? 3 : hk < 0.66 ? 2 : 1) : (hk < 0.5 ? 2 : 1);
-    if (ph > this.phase) { this.phase = ph; this.start(this.enrage()); return; }
+    if (ph > this.phase) { this.phase = ph; this.start(this.bossId === 'king' && ph === 3 && G.finale && G.finale.canRun() ? this.crownSilence() : this.enrage()); return; }
     if (this.cd > 0) {
       if (this.bossId === 'brine') { if (reach < 8) this.walk(-nx, -nz, this.speed); else this.walk(-nz * this.strafe, nx * this.strafe, this.speed * 0.6); }
       else if (reach > 3) this.walk(nx, nz, this.speed); else this.walk(-nz * this.strafe, nx * this.strafe, this.speed * 0.4);
@@ -328,6 +329,12 @@ export class Enemy {
       case 'sRain': yield* this.pRain(3 + (this.tier || 1), 3, 0.3); break;
     }
     void K; this.pose(null); this.cd = P > 2 ? 0.45 : P > 1 ? 0.75 : 1.25;
+  }
+  // the Hollow King's last phase begins: the crown silences everything (finale.js)
+  *crownSilence() {
+    this.invuln = true; this.pose('cast'); audio.sfx('dark'); audio.sfx('roar', 0.6); fx.shake(0.8);
+    fx.ring(this.pos, 0x2a1f40, 1, 30, 1.2, true); fx.column(this.pos, 0x6a4ab0, 10, 60); G.finale.begin(this);
+    yield 1.4; this.invuln = false; this.pose(null); this.cd = 0.4;
   }
   *enrage() {
     const col = EL[this.el].color; this.invuln = true; this.pose('cast'); audio.sfx('roar'); fx.shake(0.7); fx.ring(this.pos, col, 1, 14, 0.7, true); fx.column(this.pos, col, 8, 50);

@@ -55,6 +55,7 @@ export class Companion {
   get power() { return kithPower(this.k); }
   dispose() { G.scene.remove(this.model.root); this.model.dispose(); }
   update(dt) {
+    if (this.silenced) return;   // the Hollow Crown's silence (finale.js)
     const p = G.player; this.animT += dt; this.cd -= dt; this.poseT += dt; if (this.busy > 0) this.busy -= dt;
     let tgt = null;
     if (G.combatT > 0 && !p.dead) {

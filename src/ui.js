@@ -329,8 +329,8 @@ export const ui = {
     this.xpFill.style.width = clamp(s.xp / xpNext(s.level) * 100, 0, 100) + '%';
     let fl = ''; for (let i = 0; i < p.maxPotions; i++) fl += `<b${i < p.potions ? '' : ' class="e"'}></b>`; set(e.flask, fl);
     set(e.motes, `◆ ${s.motes} &nbsp; ⌇ ${s.threads}${s.sigils ? ` &nbsp; ✦ ${s.sigils}` : ''}`);
-    const tr = G.trials && G.trials.objective();
-    set(e.quest, G.run ? `<small>The Abyss</small>Floor ${G.run.floor}. Record: ${s.abyssBest || 'none'}` : tr ? `<small>Training</small>${tr}` : `<small>Objective</small>${objectiveFor(s).text}`);
+    const tr = G.trials && G.trials.objective(), fin = G.finale && G.finale.objective();
+    set(e.quest, G.run ? `<small>The Abyss</small>Floor ${G.run.floor}. Record: ${s.abyssBest || 'none'}` : fin ? `<small>The Hollow Crown</small>${fin}` : tr ? `<small>Training</small>${tr}` : `<small>Objective</small>${objectiveFor(s).text}`);
     // party chips
     const party = partyList(), act = activeKith(), sig = party.map((k) => k.id + ':' + k.level + (k === act ? '*' : '')).join(',') + input.usingPad;
     if (sig !== this.chipSig) {

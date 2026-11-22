@@ -158,6 +158,7 @@ export class Player {
     fx.ring(this.pos, this.elColor, 0.5, 11, 0.6, true); fx.disc(this.pos, 10, this.elColor, 80); fx.column(this.pos, this.elColor, 9, 50);
     G.ui.toast('Unison Burst', 'gold', 1.4);
     for (const e of G.enemies) { if (e.dead || e.spawnT > 0) continue; if (Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) < 11 + e.radius) e.hurt(this.atkPow * 5.5, { el: this.element, from: this.pos, knock: 14, poise: 120, player: true, guardBreak: true }); }
+    if (G.finale) G.finale.onUnison();   // in the Hollow Court, this is what breaks the crown
   }
   drink() {
     if (this.potions <= 0 || this.hp >= this.maxHp) { audio.sfx('deny'); return; }

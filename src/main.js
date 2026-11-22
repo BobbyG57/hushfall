@@ -15,6 +15,7 @@ import { ART, loadArt } from './art.js';
 import { BIOME, BOSS, BOONS, SHRINES, SHRINE_ORDER, WAYSTONES, TALK, CHAT, DOORS, FREED, OPENS, MEMORIES, LULLABY, memoryLines, KITH, EL, xpNext, MAX_LEVEL } from './data.js';
 import { trials } from './trials.js';
 import { rival } from './rival.js';
+import { finale } from './finale.js';
 import { clamp, damp, lerp, smooth, angLerp, angDiff, rand, pick, weighted } from './util.js';
 
 // ---------------------------------------------------------------- renderer + scene
@@ -63,6 +64,7 @@ function updateEnv(dt) {
     tF.lerp(NIGHT, (1 - dayl) * 0.86).lerp(DUSK, dusk * 0.4 * dayl); tT.lerp(NTOP, (1 - dayl) * 0.94); tS.lerp(DUSK, dusk).lerp(MOON, 1 - dayl);
     sunDir.set(Math.cos(dayT * Math.PI * 2) * 0.75, Math.max(0.32, Math.abs(s)) + 0.12, 0.45).normalize();
   }
+  if (G.silenceGrey > 0.01) { hushGrey(tF, 0.85 * G.silenceGrey); hushGrey(tT, 0.85 * G.silenceGrey); hushGrey(tS, 0.75 * G.silenceGrey); amb *= 1 - 0.25 * G.silenceGrey; }   // the Hollow Crown's silence
   const k = 1 - Math.exp(-2.4 * dt);
   env.fog.lerp(tF, k); env.top.lerp(tT, k); env.sun.lerp(tS, k); env.amb += (amb - env.amb) * k; env.day += (dayl - env.day) * k; 
   // in the classic view the world fades out a short way past the top of the screen
@@ -265,7 +267,10 @@ const game = {
     p.reset(); p.fullRestore(); p.gauge = 0; G.artCd = {}; K.summonActive(true); game.save();
   },
   toggleLock, lockNext,
-  castArt: K.castArt, tryBind: K.tryBind, swapKith: K.swapKith,
+  // in the Hollow Crown's silence (finale.js) your Kith cannot hear you
+  castArt: () => { if (finale.silenced()) { audio.sfx('deny'); ui.toast('Your Kith cannot hear you.'); } else K.castArt(); },
+  swapKith: (d) => { if (finale.silenced()) audio.sfx('deny'); else K.swapKith(d); },
+  tryBind: K.tryBind,
 
   talk(id) {
     const s = G.save;
@@ -324,7 +329,7 @@ const game = {
   },
   shrineClear(def, room, A) {
     if (room.t !== 'boss') { ui.toast('The way opens.', '', 1.6); return; }
-    const s = G.save, id = def.id, first = !s.shrines[id]; G.boss = null; game.setMood('shrine');
+    const s = G.save, id = def.id, first = !s.shrines[id]; G.boss = null; game.setMood(id === 'hollow' ? 'song' : 'shrine');   // the ending plays the full song
     after(1.8, () => {
       A.addPortal(0, room.cz, 'Return to the surface', () => game.leaveArea());
       if (!first) { ui.toast('The guardian falls again.', 'gold'); return; }
@@ -332,7 +337,7 @@ const game = {
       const lines = [...(FREED[id] || [])];
       if (id === 'hollow') lines.push(['', 'The Hush is broken. You gain 2 Skill Sigils.'], ['', 'Thank you for playing Hushfall.'], ['', 'The Abyss, the Hush Rifts and the rarest Kith are still out there.']);
       else lines.push(['', `The ${def.name.replace(/^The /, '')} wakes. You claim the ${def.relic}. ${def.relicDesc} You also gain 2 Skill Sigils.`], ['', OPENS[id]]);
-      ui.say(lines, () => game.save());
+      ui.say(lines, () => { game.save(); if (id === 'hollow') finale.reset(true); });   // Lumen fades into the light
     });
   },
   leaveArea() {
@@ -382,7 +387,7 @@ const game = {
     });
   },
 };
-G.game = game; G.ui = ui; G.world = world; G.trials = trials; G.rival = rival;
+G.game = game; G.ui = ui; G.world = world; G.trials = trials; G.rival = rival; G.finale = finale;
 
 function interact() {
   const p = G.player; if (p.dead) { ui.setPrompt(null); return; }
@@ -422,7 +427,7 @@ function frame(now) {
           p.update(pdt); if (G.comp) G.comp.update(pdt);
           for (const e of G.enemies) e.update(dt);
           for (let i = G.enemies.length - 1; i >= 0; i--) if (G.enemies[i].gone) G.enemies.splice(i, 1);
-          updateCombat(dt); G.area.update(dt, G.time); updateLock(raw); trials.update(); rival.update();
+          updateCombat(dt); G.area.update(dt, G.time); updateLock(raw); trials.update(); rival.update(); finale.update(dt);
           for (const id in G.artCd) if (G.artCd[id] > 0) G.artCd[id] -= pdt;
           if (G.combatT > 0) { G.combatT -= raw; game.tip('fight'); if (G.comp && s.tips.fight && s.playtime > 30) game.tip('art'); }
           if (G.lastHitT > 0) { G.lastHitT -= raw; if (G.lastHitT <= 0) G.lastHit = null; }

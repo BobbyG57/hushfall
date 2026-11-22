@@ -74,6 +74,8 @@ const MOODS = {
   gloam: { root: 46, scale: 'min', bpm: 62, chords: [0, 1, 3, 0], melody: 0.3, bright: 700 },
   shrine: { root: 48, scale: 'dor', bpm: 78, chords: [0, 2, 1, 3], melody: 0.3, bright: 800 },
   boss: { root: 45, scale: 'phr', bpm: 132, chords: [0, 1, 3, 1], melody: 0.6, bright: 1800, drive: 1 },
+  finale: { root: 55, scale: 'maj', bpm: 112, chords: [0, 3, 4, 2], melody: 0.7, bright: 2200, drive: 0.55 },   // the Kith sing (finale.js)
+  song: { root: 55, scale: 'maj', bpm: 80, chords: [0, 3, 4, 2], melody: 0.6, bright: 2000 },   // the ending: the full song of Vael
 };
 let mood = 'title', moodDef = MOODS.title, step = 0, nextT = 0, melIdx = 2, intensity = 0;
 // The overworld music grows as the shrines wake (STORY.md, section 8). Under the Hush the melody is
@@ -116,7 +118,7 @@ function schedule() {
   while (nextT < now() + 0.12) {
     const bar = Math.floor(step / 16), s = step % 16, chord = moodDef.chords[bar % moodDef.chords.length];
     const at = nextT - now();
-    const drive = moodDef.drive || intensity, L = OVERWORLD[mood] ? song : -1;   // L: song layers, -1 when not in the overworld
+    const drive = moodDef.drive || intensity, L = mood === 'finale' || mood === 'song' ? 5 : OVERWORLD[mood] ? song : -1;   // L: song layers (-1: shrines, bosses, title)
     if (s === 0) pad(chord, sixteenth * 16, L === 0 ? 0.65 : L > 0 && L < 5 ? 0.8 + 0.04 * L : 1);
     if (s % 4 === 0) tone(mtof(deg(chord) - 12), sixteenth * 3.5, 'sine', 0.1 + 0.08 * drive, 0, at, musBus);
     if (s % 2 === 0 && Math.random() < moodDef.melody * (L === 0 ? 0.3 : 1) * (s % 4 === 0 ? 1.2 : 0.7)) {
@@ -159,6 +161,7 @@ export const audio = {
   sfx(name, vol = 1) { if (!ctx || ctx.state !== 'running') return; const f = SFX[name]; if (f) { try { f(vol); } catch (e) { /* ignore */ } } },
   setMood(m) { if (m !== mood && MOODS[m]) { mood = m; moodDef = MOODS[m]; } },
   setSong(n) { song = Math.max(0, Math.min(5, n)); },   // how many shrines are awake
+  silence(on) { if (musBus) musBus.gain.setTargetAtTime(on ? 0 : 0.55, now(), on ? 0.35 : 0.8); },   // the Hollow Crown's silence
   setVolume(v) { G.opts.volume = v; if (master) master.gain.value = v; },
   update(dt, inCombat) { intensity += ((inCombat ? 1 : 0) - intensity) * Math.min(1, dt * 1.5); schedule(); },
 };
