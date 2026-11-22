@@ -36,7 +36,7 @@ export class Enemy {
   place(x, z) { this.pos.set(x, 0, z); G.area.resolve(this.pos, this.radius, this); this.pos.y = G.area.heightAt(this.pos.x, this.pos.z); this.home = { x: this.pos.x, z: this.pos.z }; this.model.root.position.copy(this.pos); }
   get bindable() { return !!this.wild && !this.dead && this.hp / this.maxHp <= 0.5; }
   remove() { this.gone = true; this.releaseToken(); G.scene.remove(this.model.root); this.model.dispose(); if (G.lock === this) G.lock = null; if (G.boss === this) G.boss = null; }
-  alert() { if (!this.aggro) { this.aggro = true; this.passive = false; G.combatT = Math.max(G.combatT, 3); } }
+  alert() { if (!this.aggro) { this.aggro = true; this.passive = false; G.combatT = Math.max(G.combatT, 3); if (!this.wild && !this.boss && !this.minion) G.game.tip(this.type); } }
 
   // ---- script helpers
   start(gen) { this.script = gen; this.wait = 0; }

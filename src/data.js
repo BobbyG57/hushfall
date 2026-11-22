@@ -159,6 +159,21 @@ export const RIFTS = [
   { id: 'r0', x: 98, z: 38 }, { id: 'r1', x: 272, z: -130 }, { id: 'r2', x: -130, z: 272 }, { id: 'r3', x: 130, z: -272 }, { id: 'r4', x: -272, z: 130 },
 ];
 
+// Spots added for the story's teaching plan (STORY.md, build step 3). They are kept apart from CAMPS
+// and KZONES on purpose: those also shape the terrain and props when the world is generated, and
+// changing them would move every Echo Shard in existing saves. These change nothing else.
+export const SPRINGS = { x: 164, z: 90 };   // Emberridge hot springs, south of the Emberridge Gate Waystone
+export const EXTRA_ZONES = [
+  // a stray Cinderpup napping by Brannoc's forge: an Ember Kith for the Shrine of Roots, if you have none
+  { kind: 'kith', x: -21, z: -4, r: 1.5, n: 1, lvl: 2, table: [['cinderpup', 1]], cond: 'stray' },
+  // Tide Kith soaking in the hot springs: the counter for the Shrine of Cinders
+  { kind: 'kith', x: SPRINGS.x, z: SPRINGS.z, r: 6, n: 2, table: [['puddlefin', 70], ['shellgar', 30]] },
+  // the first of each new enemy type, met on its own on the way from the Waystone to the shrine
+  { kind: 'camp', x: 188, z: -9, r: 3, lvl: 6, list: ['brute'] },
+  { kind: 'camp', x: -6, z: 187, r: 3, lvl: 11, list: ['warder'] },
+  { kind: 'camp', x: -19, z: -192, r: 3, lvl: 16, list: ['wraith'] },
+];
+
 const W = (...a) => a;
 export const SHRINES = {
   roots: { id: 'roots', name: 'Shrine of Roots', biome: 'meadow', el: 'verdant', level: 3, x: -62, z: -66, boss: 'ghorn', relic: 'Heart of Root', relicDesc: 'A third Kith may now walk beside you.',
@@ -375,6 +390,7 @@ export const memoryLines = (m) => m.lines.map((l, i) => (i === 0 ? ['Memory: ' +
 
 // What the villagers say, chapter by chapter (indexed like G.save.quest). `first` is said once per
 // chapter; Brannoc, Pip and Oona then open their menus, and Maren repeats her `again` line.
+// A third entry on a line is a condition (LINE_COND in main.js): the line is only said when it is true.
 const ch = (first, again) => ({ first, again });
 const maren = (t) => ['Elder Maren', t], bran = (t) => ['Brannoc', t], pip = (t) => ['Pip', t], oona = (t) => ['Keeper Oona', t];
 export const CHAT = {
@@ -394,8 +410,8 @@ export const CHAT = {
   ],
   smith: [
     null,
-    ch([bran('Maren\'s foundling. Wren, is it? That blade of yours is thirsty.'), bran('Light strikes chain together. Hold a heavy strike to drive the point home: it breaks a guard. And dodge through a blow, never back away from it.'), bran('Bring me Motes and I will put an edge on that blade you can hear.')]),
-    ch([bran('Emberridge. Of course it is Emberridge next.'), bran('I was keeper of the Shrine of Cinders, once. Kiln was my Kith. Best forge partner a smith ever had.'), bran('When the Hush came, I ran. Kiln stayed, and waited at the forge for me. I hear it is something else now.'), bran('The beasts up there hit too hard to trade blows with. Tap your guard just as a blow lands and you will turn it aside. Then make them pay.'), bran('And tide douses ember. If you have a water Kith, bring it.')]),
+    ch([bran('Maren\'s foundling. Wren, is it? That blade of yours is thirsty.'), bran('Light strikes chain together. Hold a heavy strike to drive the point home: it breaks a guard. And dodge through a blow, never back away from it.'), ['Brannoc', 'And there is a stray Cinderpup that keeps falling asleep in my coal. If you want a fire Kith, it is yours. If it will have you.', 'nopup'], bran('Bring me Motes and I will put an edge on that blade you can hear.')]),
+    ch([bran('Emberridge. Of course it is Emberridge next.'), bran('I was keeper of the Shrine of Cinders, once. Kiln was my Kith. Best forge partner a smith ever had.'), bran('When the Hush came, I ran. Kiln stayed, and waited at the forge for me. I hear it is something else now.'), bran('The beasts up there hit too hard to trade blows with. Tap your guard just as a blow lands and you will turn it aside. Then make them pay.'), ['Brannoc', 'And tide douses ember. Bring your water Kith.', 'tide'], ['Brannoc', 'And tide douses ember. If you have no water Kith, ask Pip where to find one. He hears everything.', 'notide']]),
     ch([bran('You brought Kiln home. It remembered me, at the end. It remembered.'), bran('I will not forget that. Not ever.'), bran('Mirrormere next. The shield-bearers there block anything from the front. Hit them hard enough to break the guard, or get behind them.')]),
     ch([bran('Skarn. I sparred with him when we were young. He fights the way the wind changes: you only see it after.'), bran('If you have the Sigils, learn Flash Step. Dodge at the very last instant and the world slows down for you.'), bran('Some fighters parry and punish. Some dance. Some let their Kith carry the fight. Find out which one you are.')]),
     ch([bran('Gloamwood. I will make your blade as sharp as I can. That is all I can give you now.')]),
@@ -404,7 +420,7 @@ export const CHAT = {
   merchant: [
     null,
     ch([pip('Threads for binding, friend! Spun fresh this morning. Mostly fresh.'), pip('A Bond Thread is how you ask a Kith to stay. Tire it out first, mind. Nobody listens to an offer while they are winning.')]),
-    ch([pip('Emberridge, is it? Hot, rocky, everything on fire. Terrible for business. Take extra Threads.'), pip('Word is the big brutes up there swing slow and hit like falling houses. Old Brannoc could tell you more, if he felt like talking. He never does.')]),
+    ch([pip('Emberridge, is it? Hot, rocky, everything on fire. Terrible for business. Take extra Threads.'), pip('Word is the big brutes up there swing slow and hit like falling houses. Old Brannoc could tell you more, if he felt like talking. He never does.'), pip('And a tip, free of charge: there are hot springs a short walk south of the Emberridge Gate Waystone. Puddlefins and Shellgars soak in them. Water Kith, friend. Tide douses ember.')]),
     ch([pip('Mirrormere! I used to sell there. Turns out nobody buys from a merchant with no reflection.'), pip('Storm Kith crackle across water like nobody\'s business. Voltkits run all over the meadow, if you can catch one.')]),
     ch([pip('Stormreach. Hold on to your hat. Hold on to my Threads, too: no refunds.'), pip('The wind spirits up there blink right past you. Keep your eyes on them or lose them. Meadow folk swear by roots against wind.')]),
     ch([pip('Gloamwood? Nobody comes back from Gloamwood with Threads left. Which is to say: buy lots.'), pip('Some say there is a black fox in there that is not a Kith at all, but a memory. Some say a lot of things. I say: buy Threads.')]),
@@ -412,7 +428,7 @@ export const CHAT = {
   ],
   keeper: [
     null,
-    ch([oona('Your Kith are welcome in my grove. Any you bond with but cannot carry will wait here, safe.'), oona('A wild Kith will only hear a Bond Rite once it is tired, below half its strength. The weaker it is, the easier the song is to match. Mind your timing on the ring.'), oona('And Ghorn\'s roots fear fire, little one. If none of your Kith can burn, keep moving and stay out of his reach.')]),
+    ch([oona('Your Kith are welcome in my grove. Any you bond with but cannot carry will wait here, safe.'), oona('A wild Kith will only hear a Bond Rite once it is tired, below half its strength. The weaker it is, the easier the song is to match. Mind your timing on the ring.'), ['Keeper Oona', 'And Ghorn\'s roots fear fire, little one. Your Cinderpup will know what to do.', 'pup'], ['Keeper Oona', 'And Ghorn\'s roots fear fire, little one. If none of your Kith can burn, look by Brannoc\'s forge: a stray Cinderpup has been napping in his coal.', 'nopup']]),
     ch([oona('Three may walk with you now. Choose them like a song: one to hit hard, one to keep you standing, and one for whatever lies ahead.'), oona('Kith grow into new shapes when they are ready. Mosslings, Cinderpups, Puddlefins and Voltkits around level ten. Others take longer.')]),
     ch([oona('Water is patient, but lightning is not. A storm Kith will serve you at the mere.')]),
     ch([oona('Your meadow friends will have grown by now. Roots hold fast against the wind, and Skarn\'s storms will break on them.')]),

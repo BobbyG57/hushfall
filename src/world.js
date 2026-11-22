@@ -2,11 +2,16 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { clamp, lerp, smooth, fbm, noise, rng, rand, weighted } from './util.js';
-import { BIOME, PASS, WAYSTONES, SHRINES, CAMPS, KZONES, KTABLE, RIFTS, NPCS, EL, VEIL_REQ } from './data.js';
+import { BIOME, PASS, WAYSTONES, SHRINES, CAMPS, KZONES, KTABLE, RIFTS, NPCS, EL, VEIL_REQ, EXTRA_ZONES, SPRINGS } from './data.js';
 import { makeNpcModel, animate } from './models.js';
 import { spawnEnemy, spawnWild } from './enemies.js';
 import { fx } from './fx.js';
 import { ART } from './art.js';
+
+// conditions for story spots in EXTRA_ZONES
+const ZONE_COND = {
+  stray: (s) => s.quest >= 1 && !s.kith.some((k) => k.species === 'cinderpup'),   // only if you have no Cinderpup
+};
 
 const SIZE = 640, HALF = 320, N = 256, CELL = SIZE / N, NV = N + 1;
 const H = new Float32Array(NV * NV);
@@ -301,6 +306,24 @@ export const world = {
       this.zones.push({ kind: 'kith', x: kz.x, z: kz.z, r: 9, biome, spawned: false, alive: [], respawnAt: 0 });
       this.pois.push({ type: 'grove', x: kz.x, z: kz.z, name: 'Kith grove' });
     }
+    // story spots (EXTRA_ZONES in data.js): no flats and no random numbers, so nothing else moves
+    for (const ez of EXTRA_ZONES) this.zones.push({ ...ez, biome: biomeAt(ez.x, ez.z), spawned: false, alive: [], respawnAt: 0 });
+    { // the Emberridge hot springs: three steaming pools in a ring of pale rocks
+      const y = this.heightAt(SPRINGS.x, SPRINGS.z), grp = new THREE.Group(); grp.position.set(SPRINGS.x, y, SPRINGS.z); g.add(grp);
+      const pool = new THREE.CylinderGeometry(1, 1, 0.2, 18), water = new THREE.MeshLambertMaterial({ color: 0x5fd0d8, emissive: 0x1f6a70, transparent: true, opacity: 0.88 }), rim = lit(0x8a7a6a);
+      const pools = [[0, 0, 3.2], [4.8, 2.6, 1.8], [-3.8, 3.6, 1.5]];
+      for (const [px, pz, pr] of pools) { const w = new THREE.Mesh(pool, water); w.scale.set(pr, 1, pr); w.position.set(px, 0.12, pz); grp.add(w); const e = new THREE.Mesh(pool, rim); e.scale.set(pr + 0.35, 1, pr + 0.35); e.position.set(px, 0.04, pz); grp.add(e); }
+      for (let k = 0; k < 7; k++) { const a = k / 7 * 6.28 + 0.3; mesh(PG.rock, lit(0xd8cfc0), 0.9, 1.1 + (k % 3) * 0.4, 0.9, Math.cos(a) * 9, 0, Math.sin(a) * 9, grp); }
+      this.steam = pools.map(([px, pz, pr]) => ({ x: SPRINGS.x + px, y: y + 0.3, z: SPRINGS.z + pz, r: pr }));
+      // clear the plants that grew where the pools now are (only hides them, so nothing else moves)
+      const mt = new THREE.Matrix4(), at = new THREE.Vector3(), gone = new THREE.Matrix4().makeScale(0, 0, 0);
+      for (const pm of this.propMeshes) {
+        if (pm.biome !== 'ember') continue; let hit = false;
+        for (let i = 0; i < pm.im.count; i++) { pm.im.getMatrixAt(i, mt); at.setFromMatrixPosition(mt); if (Math.hypot(at.x - SPRINGS.x, at.z - SPRINGS.z) < 7) { pm.im.setMatrixAt(i, gone); hit = true; } }
+        if (hit) pm.im.instanceMatrix.needsUpdate = true;
+      }
+      this.pois.push({ type: 'grove', x: SPRINGS.x, z: SPRINGS.z, name: 'Hot springs' });
+    }
     // Hush rifts
     RIFTS.forEach((r, i) => {
       const y = this.heightAt(r.x, r.z), m = mesh(PG.oct, glow(0x7a3ad8, 0.85), 1.5, 4.4, 1.5, r.x, y + 0.8, r.z, g, false);
@@ -347,10 +370,10 @@ export const world = {
   spawnZone(z) {
     z.spawned = true; z.alive = []; const B = BIOME[z.biome];
     if (z.kind === 'camp') {
-      for (const t of z.list) { const a = rand(6.28), d = rand(2.5, z.r); z.alive.push(spawnEnemy(t, z.x + Math.cos(a) * d, z.z + Math.sin(a) * d, z.lvl, B.el)); }
+      for (const t of z.list) { const a = rand(6.28), d = rand(Math.min(2.5, z.r * 0.5), z.r); z.alive.push(spawnEnemy(t, z.x + Math.cos(a) * d, z.z + Math.sin(a) * d, z.lvl, B.el)); }
     } else {
-      const n = 2 + (Math.random() < 0.45 ? 1 : 0);
-      for (let i = 0; i < n; i++) { const a = rand(6.28), d = rand(1, z.r), sp = weighted(KTABLE[z.biome]); const lvl = B.lvl[0] + Math.floor(Math.random() * (B.lvl[1] - B.lvl[0] + 1)); z.alive.push(spawnWild(sp, z.x + Math.cos(a) * d, z.z + Math.sin(a) * d, lvl)); }
+      const n = z.n || 2 + (Math.random() < 0.45 ? 1 : 0);
+      for (let i = 0; i < n; i++) { const a = rand(6.28), d = rand(Math.min(1, z.r), z.r), sp = weighted(z.table || KTABLE[z.biome]); const lvl = z.lvl || B.lvl[0] + Math.floor(Math.random() * (B.lvl[1] - B.lvl[0] + 1)); z.alive.push(spawnWild(sp, z.x + Math.cos(a) * d, z.z + Math.sin(a) * d, lvl)); }
     }
   },
 
@@ -363,7 +386,7 @@ export const world = {
       for (const pm of this.propMeshes) { const ps = PASS[pm.biome]; pm.im.visible = pm.biome === 'meadow' ? pr < 235 : ((pr > 110 && pb === pm.biome) || Math.hypot(p.x - ps.x, p.z - ps.z) < 125); }
       for (const z of this.zones) {
         const d = Math.hypot(p.x - z.x, p.z - z.z);
-        if (!z.spawned) { if (d < 72 && s.playtime >= z.respawnAt) this.spawnZone(z); }
+        if (!z.spawned) { if (d < 72 && s.playtime >= z.respawnAt && (!z.cond || ZONE_COND[z.cond](s))) this.spawnZone(z); }
         else {
           z.alive = z.alive.filter((e) => !e.dead && !e.gone);
           if (z.alive.length === 0) { z.spawned = false; z.respawnAt = s.playtime + (z.kind === 'camp' ? 420 : 100); }
@@ -371,6 +394,10 @@ export const world = {
           else if (z.kind === 'kith' && d < 26) for (const e of z.alive) if (!s.dex[e.species]) { s.dex[e.species] = 1; G.game.tip('kith'); }
         }
       }
+    }
+    if (this.steam && Math.hypot(p.x - SPRINGS.x, p.z - SPRINGS.z) < 90 && Math.random() < dt * 14) {
+      const v = this.steam[Math.floor(Math.random() * this.steam.length)], a = rand(6.28), d = rand(0, v.r * 0.8);
+      fx.spawn(v.x + Math.cos(a) * d, v.y, v.z + Math.sin(a) * d, rand(-0.2, 0.2), rand(0.9, 1.6), rand(-0.2, 0.2), 0xf2f6f8, 0.9, 1.8, 0);
     }
     for (const sp of this.spinners) {
       if (sp.kind === 'portal') { sp.pm.opacity = 0.45 + 0.25 * Math.sin(t * 2.5); if (Math.hypot(p.x - sp.x, p.z - sp.z) < 60 && Math.random() < dt * 14) fx.spawn(sp.x + rand(-2, 2), sp.y + rand(-2.5, 2.5), sp.z + rand(-2, 2), 0, rand(0.5, 2), 0, sp.col, 0.4, 0.8, 0); }

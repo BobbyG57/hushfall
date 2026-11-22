@@ -138,8 +138,8 @@ tended the Lantern Tree's roots, has walled himself inside his shrine.
   your first look at **elements**.
 - **How it is taught:** the shrine door reads "*Ember wakes what roots
   forget.*" Oona adds: "Roots fear fire, child." If your starter was not
-  Cinderpup, a stray Cinderpup sleeps by Brannoc's forge and can be bonded.
-  [words] + [new] place one Cinderpup
+  Cinderpup, a stray Cinderpup sleeps by Brannoc's forge and can be bonded;
+  Brannoc and Oona mention it only if you have no Cinderpup. [built]
 - **The test:** Ghorn's huge, slow sweeps and slams are a dodging exam. At half
   health he calls Skitters, which tests crowd control. [built]
 - **Reward:** the Heart of Root, a third Kith slot. [built] Oona explains party
@@ -157,11 +157,13 @@ ran, and left his Kith partner Kiln waiting at the shrine forge. Kiln became
 Cindermaw.
 
 - **New skill:** **parrying**. Brutes hit too hard to trade blows with.
-- **How it is taught:** the first Brute stands alone on the road in. Before
-  that, Brannoc runs a forge trial: "Parry three of my swings." [new] the
-  trial; [tweak] put a lone Brute first
-- **Prepare:** Tide beats Ember. Pip mentions "a Puddlefin in the hot spring
-  pools up the ridge." [words] + [tweak] add Puddlefin to Emberridge
+- **How it is taught:** the first Brute stands alone on the road from the
+  Emberridge Gate Waystone, and a tip about parrying shows when it notices
+  you. [built] Before that, Brannoc runs a forge trial: "Parry three of my
+  swings." [new]
+- **Prepare:** Tide beats Ember. Pip mentions the hot springs a short walk
+  south of the Emberridge Gate Waystone, where Puddlefins and Shellgars soak.
+  [built]
 - **The test:** Cindermaw's charges punish standing still and reward a
   sidestep or parry; its fire breath teaches positioning. [built]
 - **Reward:** the Ember Sigil, which unlocks Unison Burst. [built] Story
@@ -178,9 +180,10 @@ crown. This is the midpoint: Echo Shards here reveal that Maren trained the
 Hollow King.
 
 - **New skill:** **breaking guards**. Warders block everything from the front.
-- **How it is taught:** the first Warder guards a narrow bridge alone. A
-  fisher NPC shouts "Hit it *hard*, or get behind it!" [new] fisher; [tweak]
-  camp
+- **How it is taught:** the first Warder stands alone on the way from the
+  Mirrormere Shore Waystone, with a tip about heavy attacks and flanking.
+  [built] A fisher NPC shouting "Hit it *hard*, or get behind it!" would be a
+  nice extra. [new]
 - **Prepare:** Storm beats Tide. Voltkit from the meadow is the hint: Maren
   says "Bring something that crackles." [words]
 - **The test:** Maressa keeps her distance with rings, walls and volleys, so
@@ -200,9 +203,10 @@ enough to be worth hurting his friend for.
 
 - **New skill:** **perfect dodges and switching targets**. Wraiths blink
   around you.
-- **How it is taught:** Skarn's soldiers spar with you on the stair; a wraith
-  pair teaches lock-on flicking. The Flash Step skill is suggested by Brannoc.
-  [words]
+- **How it is taught:** the first Wraith waits alone on the stair from the
+  Stormreach Stair Waystone, with a tip about lock-on and last-instant dodges,
+  and Brannoc suggests the Flash Step skill. [built] Skarn's soldiers sparring
+  with you on the stair would be a nice extra. [new]
 - **Prepare:** Verdant beats Storm. Your meadow Kith are the answer, and Oona
   reminds you they have probably evolved by now. [words]
 - **The test:** Skarn blinks and fires beams. It is a reflex exam, closest to
@@ -303,8 +307,8 @@ region before it should offer a Kith of that element, with a hint.
 
 | Shrine | Its element | Bring | Where to find it before |
 | --- | --- | --- | --- |
-| Roots | Verdant | Ember | starter, or the stray Cinderpup at the forge [new] |
-| Cinders | Ember | Tide | starter, or the Emberridge hot springs [tweak] |
+| Roots | Verdant | Ember | starter, or the stray Cinderpup at the forge [built] |
+| Cinders | Ember | Tide | starter, or the Emberridge hot springs [built] |
 | Tides | Tide | Storm | Voltkit in the meadow [built] |
 | Gales | Storm | Verdant | Mossling or Thornback, likely evolved by now [built] |
 | Hollow Court | Gloam | your strongest | Gloam hits and is hit harder by everything [built] |
@@ -380,15 +384,21 @@ Roughly from quickest and most valuable to largest.
    `CHAT`, `DOORS`, `BOSS_INTRO`, `FREED`, `OPENS`). Each villager says their
    chapter lines once, then Brannoc, Pip and Oona open their menus and Maren
    repeats a short hint. The lanterns from step 5 came along too, so the
-   dialogue about them is true. Lines that would mention things not built yet
-   (the stray Cinderpup, Pip's hot-spring rumour, Sable) are left out until
-   those steps land.
+   dialogue about them is true. Lines about Sable are left out until Sable
+   exists.
 2. **Echo Shard memories** [words + small]: 16 short memories on pickup.
    **Done 2026-11-22.** The text is `MEMORIES` and `LULLABY` in `src/data.js`.
    Memories show in the dialogue box with their title and pale blue italics,
    and there is a Memories tab in the pause menu.
 3. **Counter Kith and enemy introductions** [tweak]: a Cinderpup by the forge,
    Puddlefin in Emberridge, first Brute, Warder and Wraith on their own.
+   **Done 2026-11-22.** All in `EXTRA_ZONES` and `SPRINGS` in `src/data.js`,
+   kept apart from `CAMPS` and `KZONES` so the world (and every Echo Shard)
+   stays where it was. The stray Cinderpup only appears once you have chosen a
+   starter, and only if you own no Cinderpup. Villager lines can now carry a
+   condition (`LINE_COND` in `src/main.js`), so Brannoc and Oona only mention
+   things that are true for your save. Brutes, Warders and Wraiths each show a
+   one-time tip the first time one notices you.
 4. **Teaching moments** [new]: Brannoc's practice yard, Oona's guided Bond
    Rite, the forge parry trial.
 5. **The world reacts** [new]: music layers, colour returning (lanterns done).

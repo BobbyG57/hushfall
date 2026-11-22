@@ -182,6 +182,13 @@ function updateLock(dt) {
 
 // ---------------------------------------------------------------- game flow
 let deathT = 0, lastBiome = null, saveT = 0, mood = 'title';
+// conditions on villager lines (the third entry of a line in CHAT)
+const owns = (s, test) => s.kith.some((k) => test(KITH[k.species], k.species));
+const LINE_COND = {
+  pup: (s) => owns(s, (sp, id) => id === 'cinderpup'), nopup: (s) => !owns(s, (sp, id) => id === 'cinderpup'),
+  tide: (s) => owns(s, (sp) => sp.el === 'tide'), notide: (s) => !owns(s, (sp) => sp.el === 'tide'),
+};
+
 const game = {
   returnPos: null,
   applyQuality,
@@ -205,7 +212,7 @@ const game = {
     G.player.model.root.visible = false; ui.showHud(false); document.getElementById('title').classList.remove('hidden'); G.atTitle = true; G.mode = 'title'; game.setMood('title'); ui.titleMenu(true);
   },
   tip(id) {
-    const s = G.save; if (!s || s.tips[id]) return; s.tips[id] = 1; const g = (a) => input.glyph(a), pad = input.usingPad;
+    const s = G.save; if (!s || s.tips[id]) return; const g = (a) => input.glyph(a), pad = input.usingPad;
     const T = {
       move: isClassic()
         ? (pad ? 'Move with the left stick. Push the right stick up or down to zoom.' : 'Move with <span class="key">WASD</span>. The up and down arrow keys zoom.')
@@ -217,8 +224,13 @@ const game = {
       bind: `It is weakened. Press ${g('bind')} to begin the Bond Rite.`,
       art: `${g('art')} unleashes your Kith's Bond Art. ${g('kithPrev')} ${g('kithNext')} swap Kith.`,
       heal: `${g('potion')} drinks a Dewdrop. Waystones refill them.`,
+      // the first time each tougher enemy type notices you (see EXTRA_ZONES: each is met alone first)
+      brute: `Brutes hit too hard to trade blows with. Tap ${g('guard')} just before a blow lands to parry, then strike back.`,
+      warder: `Warders block anything from the front. Hold ${g('heavy')} for a guard-breaking thrust, or get behind them.`,
+      wraith: `Wraiths blink around you. Stay locked on with ${g('lock')}, and dodge at the very last instant.`,
     };
-    ui.toast(T[id], 'tip', 7.5);
+    if (!T[id]) return;
+    s.tips[id] = 1; ui.toast(T[id], 'tip', 7.5);
   },
   gainXp(n) {
     const s = G.save, p = G.player; s.xp += n;
@@ -259,7 +271,8 @@ const game = {
     // each villager has something new to say once per chapter (CHAT in data.js), then gets on with business
     const ch = Math.max(1, s.quest), c = CHAT[id] && CHAT[id][ch], heard = id + 'abcdefg'[ch];
     const menu = { smith: () => ui.smithMenu(), merchant: () => ui.merchantMenu(), keeper: () => ui.keeperMenu() }[id];
-    if (c && c.first && !s.tips[heard]) { s.tips[heard] = 1; ui.say(c.first, () => { game.save(); if (menu) menu(); }); }
+    const first = c && c.first && c.first.filter((l) => !l[2] || LINE_COND[l[2]](s));
+    if (first && first.length && !s.tips[heard]) { s.tips[heard] = 1; ui.say(first, () => { game.save(); if (menu) menu(); }); }
     else if (menu) menu();
     else if (c && c.again) ui.say(c.again);
   },
