@@ -197,7 +197,7 @@ export async function loadPlaced() {
         o.material = glows ? new THREE.MeshBasicMaterial({ color: m.color, map: m.map }) : new THREE.MeshLambertMaterial({ color: m.color, map: m.map, flatShading: true });
         o.castShadow = true; o.receiveShadow = true;
       });
-      PLACED.kit[k] = { scene, solid: info.solid !== 0, box: new THREE.Box3().setFromObject(scene) };
+      PLACED.kit[k] = { scene, solid: info.solid !== 0, radius: info.radius || 0, box: new THREE.Box3().setFromObject(scene) };
     } catch (e) { console.warn('Could not load the kit piece ' + k, e); }
   }));
   for (const p of j.placed) {
@@ -343,6 +343,7 @@ class Region {
       o.position.set(p.x, heightAt(p.x, p.z) + (p.lift || 0), p.z); if (p.q) o.quaternion.fromArray(p.q); o.scale.fromArray(s);
       g.add(o); o.updateMatrixWorld(true);
       if (!k.solid || !this.allowed(p.x, p.z)) continue;
+      if (k.radius) { addCircle(p.x, p.z, k.radius * Math.max(s[0], s[2])); continue; }   // a trunk: just round its origin
       // its footprint, as a row of circles along its longer side
       const b = k.box, w = (b.max.x - b.min.x) * s[0], d = (b.max.z - b.min.z) * s[2], along = w >= d, len = Math.max(w, d), r = Math.max(0.3, Math.min(w, d) / 2);
       const n = Math.max(1, Math.ceil((len - 2 * r) / (r * 1.2)) + 1), cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2;

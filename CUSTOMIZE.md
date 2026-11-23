@@ -266,10 +266,8 @@ work on one piece at a time, plus one file for the building pieces.
    - **Places**: an arrow for every waystone, shrine, camp, grove and rift in
      the zone, with its name. They are there so you know what not to bury;
      moving them does not move anything in the game (that is `src/data.js`).
-   - **Kit shelf**: a row of pieces on a dark slab just outside the zone, to
-     place from: cottage, chapel, gravestone, grave cross, fence, crop field,
-     wheat field, haystack, signpost, watchtower, ruin wall, stilt hut, crag,
-     well, lamp post and cart.
+   - **Kit shelf**: rows of pieces on a dark slab just outside the zone, to
+     place from (the list is below).
    - **Placed**: the pieces set out in this zone. The meadow starts with a small
      chapel and graveyard east of Lanternrest and a farmstead to the west, to
      show how it works. Move them, delete them, or add your own.
@@ -305,6 +303,25 @@ is its footing: in the game it stands on the ground at that point, at the same
 height above or below the ground as in Blender, so pieces stay on the ground
 even if you sculpt under them later.
 
+**The pieces.** Fifty-three to start with:
+
+| For | Pieces |
+| --- | --- |
+| Villages and farms | cottage, chapel, gravestone, grave_cross, fence, field, wheat, haystack, signpost, watchtower, well, lamp_post, cart, log_pile, tent, campfire |
+| Trees and plants | oak_tree, pine_tree, birch_tree, bush, flower_patch, stump, fallen_log |
+| Stones and ruins | crag, boulder, rock_pile, standing_stone, stone_circle, ruin_wall, ruined_arch, broken_pillar, stone_lantern |
+| Water | wooden_bridge, stepping_stones, pond, lily_pads, reeds |
+| Emberridge | charred_tree, lava_rock, basalt_columns, ember_vent |
+| Gloamwood | glow_mushroom, mushroom_cluster, crystal_cluster, twisted_tree |
+| Mirrormere | stilt_hut, palm_tree, driftwood, coral |
+| Stormreach | windswept_pine, snowy_rock, storm_crystal, rune_stone |
+
+Any piece works in any zone. Lily pads float where you put them, so set them
+at the water's surface (height 0 in Blender). The hero walks over the ground,
+not the bridge deck, so lay the bridge across a dip or a stream bed. New starter
+pieces that come with later updates are added to the end of `Kit.blend`'s shelf
+by Update Blender files; any you delete stay deleted.
+
 **Changing a piece or making your own.** Do this in `Kit.blend`. Every object
 in it is a piece, except the slab and the plain figure standing by for scale
 (as tall as the hero). Edit a piece there and, after Update Blender files, every
@@ -314,8 +331,10 @@ join its parts into one object (Ctrl+J), and give it a short name; that name is
 the piece. It joins the shelf in every zone file the next time you run Update
 Blender files. Colours come from its materials. A material with Emission turned
 on (any strength) glows at night, like the windows. Pieces block your path by
-their footprint; to let the hero walk through one (like the fields), add a
-custom property `solid` set to `0` (Object properties, Custom Properties).
+their footprint. Two custom properties change that (Object properties, Custom
+Properties): `solid` set to `0` lets the hero walk through (like the fields),
+and `radius` blocks only a circle that wide round the origin instead, the way
+the trees block at their trunks but not under their leaves.
 
 **What is kept where.** The pieces are saved as `assets/models/kit/<name>.glb`,
 where they stand as `assets/world/placed.json`, and your sculpting as

@@ -1,5 +1,33 @@
 {
  "kit": {
+  "basalt_columns": {
+   "file": "models/kit/basalt_columns.glb",
+   "solid": 1
+  },
+  "birch_tree": {
+   "file": "models/kit/birch_tree.glb",
+   "solid": 1,
+   "radius": 0.35
+  },
+  "boulder": {
+   "file": "models/kit/boulder.glb",
+   "solid": 1
+  },
+  "broken_pillar": {
+   "file": "models/kit/broken_pillar.glb",
+   "solid": 1,
+   "radius": 0.8
+  },
+  "bush": {
+   "file": "models/kit/bush.glb",
+   "solid": 1,
+   "radius": 1.0
+  },
+  "campfire": {
+   "file": "models/kit/campfire.glb",
+   "solid": 1,
+   "radius": 1.0
+  },
   "cart": {
    "file": "models/kit/cart.glb",
    "solid": 1
@@ -7,6 +35,16 @@
   "chapel": {
    "file": "models/kit/chapel.glb",
    "solid": 1
+  },
+  "charred_tree": {
+   "file": "models/kit/charred_tree.glb",
+   "solid": 1,
+   "radius": 0.45
+  },
+  "coral": {
+   "file": "models/kit/coral.glb",
+   "solid": 1,
+   "radius": 0.7
   },
   "cottage": {
    "file": "models/kit/cottage.glb",
@@ -16,6 +54,23 @@
    "file": "models/kit/crag.glb",
    "solid": 1
   },
+  "crystal_cluster": {
+   "file": "models/kit/crystal_cluster.glb",
+   "solid": 1
+  },
+  "driftwood": {
+   "file": "models/kit/driftwood.glb",
+   "solid": 1
+  },
+  "ember_vent": {
+   "file": "models/kit/ember_vent.glb",
+   "solid": 1,
+   "radius": 1.3
+  },
+  "fallen_log": {
+   "file": "models/kit/fallen_log.glb",
+   "solid": 1
+  },
   "fence": {
    "file": "models/kit/fence.glb",
    "solid": 1
@@ -23,6 +78,15 @@
   "field": {
    "file": "models/kit/field.glb",
    "solid": 0
+  },
+  "flower_patch": {
+   "file": "models/kit/flower_patch.glb",
+   "solid": 0
+  },
+  "glow_mushroom": {
+   "file": "models/kit/glow_mushroom.glb",
+   "solid": 1,
+   "radius": 0.4
   },
   "grave_cross": {
    "file": "models/kit/grave_cross.glb",
@@ -40,17 +104,110 @@
    "file": "models/kit/lamp_post.glb",
    "solid": 1
   },
+  "lava_rock": {
+   "file": "models/kit/lava_rock.glb",
+   "solid": 1
+  },
+  "lily_pads": {
+   "file": "models/kit/lily_pads.glb",
+   "solid": 0
+  },
+  "log_pile": {
+   "file": "models/kit/log_pile.glb",
+   "solid": 1
+  },
+  "mushroom_cluster": {
+   "file": "models/kit/mushroom_cluster.glb",
+   "solid": 0
+  },
+  "oak_tree": {
+   "file": "models/kit/oak_tree.glb",
+   "solid": 1,
+   "radius": 0.6
+  },
+  "palm_tree": {
+   "file": "models/kit/palm_tree.glb",
+   "solid": 1,
+   "radius": 0.35
+  },
+  "pine_tree": {
+   "file": "models/kit/pine_tree.glb",
+   "solid": 1,
+   "radius": 0.45
+  },
+  "pond": {
+   "file": "models/kit/pond.glb",
+   "solid": 0
+  },
+  "reeds": {
+   "file": "models/kit/reeds.glb",
+   "solid": 0
+  },
+  "rock_pile": {
+   "file": "models/kit/rock_pile.glb",
+   "solid": 1
+  },
   "ruin_wall": {
    "file": "models/kit/ruin_wall.glb",
    "solid": 1
+  },
+  "ruined_arch": {
+   "file": "models/kit/ruined_arch.glb",
+   "solid": 0
+  },
+  "rune_stone": {
+   "file": "models/kit/rune_stone.glb",
+   "solid": 1,
+   "radius": 0.7
   },
   "signpost": {
    "file": "models/kit/signpost.glb",
    "solid": 1
   },
+  "snowy_rock": {
+   "file": "models/kit/snowy_rock.glb",
+   "solid": 1
+  },
+  "standing_stone": {
+   "file": "models/kit/standing_stone.glb",
+   "solid": 1,
+   "radius": 0.65
+  },
+  "stepping_stones": {
+   "file": "models/kit/stepping_stones.glb",
+   "solid": 0
+  },
   "stilt_hut": {
    "file": "models/kit/stilt_hut.glb",
    "solid": 1
+  },
+  "stone_circle": {
+   "file": "models/kit/stone_circle.glb",
+   "solid": 0
+  },
+  "stone_lantern": {
+   "file": "models/kit/stone_lantern.glb",
+   "solid": 1,
+   "radius": 0.5
+  },
+  "storm_crystal": {
+   "file": "models/kit/storm_crystal.glb",
+   "solid": 1,
+   "radius": 0.7
+  },
+  "stump": {
+   "file": "models/kit/stump.glb",
+   "solid": 1,
+   "radius": 0.7
+  },
+  "tent": {
+   "file": "models/kit/tent.glb",
+   "solid": 1
+  },
+  "twisted_tree": {
+   "file": "models/kit/twisted_tree.glb",
+   "solid": 1,
+   "radius": 0.45
   },
   "watchtower": {
    "file": "models/kit/watchtower.glb",
@@ -62,6 +219,15 @@
   },
   "wheat": {
    "file": "models/kit/wheat.glb",
+   "solid": 0
+  },
+  "windswept_pine": {
+   "file": "models/kit/windswept_pine.glb",
+   "solid": 1,
+   "radius": 0.45
+  },
+  "wooden_bridge": {
+   "file": "models/kit/wooden_bridge.glb",
    "solid": 0
   }
  },
