@@ -1,5 +1,6 @@
 // Boot, the frame loop, camera, lighting, and the game flow that ties every system together.
 import * as THREE from 'three';
+import { FELT, feltFrame, feltRender } from './felt.js';   // first: it must be in place before any material is made
 import { G } from './state.js';
 import { input } from './input.js';
 import { audio } from './audio.js';
@@ -29,6 +30,8 @@ const hemi = new THREE.HemisphereLight(0xffffff, 0x8a7a6a, 1.2); scene.add(hemi)
 const sun = new THREE.DirectionalLight(0xfff1d0, 2.3); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048); const sc = sun.shadow.camera; sc.left = -44; sc.right = 44; sc.top = 44; sc.bottom = -44; sc.near = 1; sc.far = 190; sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.5;
 scene.add(sun, sun.target);
+if (FELT.on) sun.shadow.radius = 4;   // soft studio shadows
+const FELT_WARM = new THREE.Color(0xffc890), FELT_HAZE = new THREE.Color(0xe9dcc2);
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { top: { value: new THREE.Color(0x3f8fe0) }, bot: { value: new THREE.Color(0xd4ecf7) } },
   vertexShader: 'varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
@@ -64,6 +67,7 @@ function updateEnv(dt) {
     const dusk = smooth(0.4, 0, Math.abs(s + 0.05)) * 0.55;
     tF.lerp(NIGHT, (1 - dayl) * 0.86).lerp(DUSK, dusk * 0.4 * dayl); tT.lerp(NTOP, (1 - dayl) * 0.94); tS.lerp(DUSK, dusk).lerp(MOON, 1 - dayl);
     sunDir.set(Math.cos(dayT * Math.PI * 2) * 0.75, Math.max(0.32, Math.abs(s)) + 0.12, 0.45).normalize();
+    if (FELT.on) { tT.lerp(FELT_HAZE, 0.45 * dayl); tF.lerp(FELT_HAZE, 0.3 * dayl); }   // felt: a warm, hazy studio backdrop
   }
   if (G.silenceGrey > 0.01) { hushGrey(tF, 0.85 * G.silenceGrey); hushGrey(tT, 0.85 * G.silenceGrey); hushGrey(tS, 0.75 * G.silenceGrey); amb *= 1 - 0.25 * G.silenceGrey; }   // the Hollow Crown's silence
   const k = 1 - Math.exp(-2.4 * dt);
@@ -76,6 +80,7 @@ function updateEnv(dt) {
   hemi.intensity = 1.3 * env.amb * lerp(0.5, 1, env.day);
   if (e.flat) { hemi.color.setHex(0xf2f0ff); hemi.groundColor.setHex(0x8a869c); } else { hemi.color.copy(env.top).lerp(WHITE, 0.65); hemi.groundColor.copy(env.fog).multiplyScalar(0.55); }
   sun.color.copy(env.sun); sun.intensity = 2.3 * lerp(0.32, 1, env.day) * (e.flat ? 0.7 : 1);
+  if (FELT.on) { hemi.intensity *= 0.72; sun.intensity *= 1.18; sun.color.lerp(FELT_WARM, 0.35); }   // felt: a warm studio key light, deeper shade
   starMat.opacity = e.flat ? 0 : (1 - env.day) * 0.9; stars.visible = starMat.opacity > 0.02; stars.position.copy(camera.position);
   sun.target.position.copy(pos); sun.position.copy(pos).addScaledVector(sunDir, 85);
   sky.position.copy(camera.position);
@@ -450,7 +455,7 @@ function frame(now) {
       }
     }
     updateCamera(raw); updateEnv(raw); fx.update(dt, raw); ui.update(raw); audio.update(raw, G.combatT > 0 && G.mode === 'play');
-    renderer.render(scene, camera);
+    if (FELT.on) { feltFrame(raw); feltRender(renderer, scene, camera); } else renderer.render(scene, camera);
   } catch (e) { showError(e); }
 }
 

@@ -11,5 +11,5 @@ export const G = {
   lock: null, boss: null, combatT: 0, attackers: 0, lastHit: null, lastHitT: 0,
   run: null,                // abyss run state { floor, boons }
   artCd: {},                // kith id -> seconds remaining
-  opts: { invertY: false, volume: 0.8, quality: 1, camera: 'classic' },   // camera: 'classic' (fixed high angle) or 'free'
+  opts: { invertY: false, volume: 0.8, quality: 1, camera: 'classic', look: 'classic' },   // camera: 'classic' (fixed high angle) or 'free'
 };

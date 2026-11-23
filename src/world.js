@@ -10,6 +10,7 @@ import { spawnEnemy, spawnWild } from './enemies.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
 import { ART } from './art.js';
+import { FELT, feltShader, soften, woolBall, woolTint } from './felt.js';
 import { T, NV, CELL, HALF, REGION_NAMES, heightAt, regionAt, roadAt, reachAt, inPass } from './terrain.js';
 
 
@@ -47,7 +48,7 @@ function groundShader(geo, mat, reg) {
   mat.customProgramCacheKey = () => 'hushfall-ground';
   mat.onBeforeCompile = (sh) => {
     for (const k of names) { sh.uniforms['t_' + k] = { value: T2[k].tex }; sh.uniforms['m_' + k] = { value: T2[k].mean }; sh.uniforms['s_' + k] = { value: 1 / T2[k].size }; }
-    sh.uniforms.uGround = { value: ART.groundStrength };
+    sh.uniforms.uGround = { value: ART.groundStrength * (FELT.on ? 0.35 : 1) };   // in felt, the felt itself is the detail
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aRegion; varying vec4 vRegion; varying vec3 vGPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRegion = aRegion; vGPos = (modelMatrix * vec4(position, 1.0)).xyz;');
@@ -66,6 +67,7 @@ vec3 gtex(sampler2D t, vec3 m, float s, vec2 p) { return (texture2D(t, p * s).rg
   g = mix(g, c, 1.0 - smoothstep(0.62, 0.84, abs(nrm.y)));
   diffuseColor.rgb *= mix(vec3(1.0), clamp(g, 0.0, 2.5), uGround);
 }`);
+    if (FELT.on) feltShader(sh);
   };
 }
 
@@ -105,6 +107,10 @@ const PG = {
   oct: new THREE.OctahedronGeometry(0.5, 0).translate(0, 0.5, 0),
   blade: new THREE.ConeGeometry(0.13, 0.75, 3, 1, true).translate(0, 0.37, 0),
 };
+// felt grass: little rounded tufts instead of blades
+const TUFT = FELT.on ? soften(new THREE.IcosahedronGeometry(0.5, 1).translate(0, 0.2, 0)) : null;
+// in felt, everything is rounder: canopies become clumps of wool balls, the rest is softened
+if (FELT.on) { for (const k in PG) if (k !== 'blade') PG[k] = soften(PG[k]); PG.sph = woolBall(3); PG.rock = soften(new THREE.DodecahedronGeometry(0.5, 1).translate(0, 0.3, 0)); }
 // [geo, color, [sx,sy,sz], yOffset, glow]
 const PROPS = {
   meadow: [
@@ -193,7 +199,7 @@ export async function loadPlaced() {
     try {
       const scene = (await loader.loadAsync('assets/' + info.file)).scene;
       scene.traverse((o) => {   // drawn in the game's own matte style; glowing parts stay lit at night
-        if (!o.isMesh) return; const m = o.material, glows = m.emissive && m.emissive.getHex() !== 0;
+        if (!o.isMesh) return; const m = o.material, glows = m.emissive && m.emissive.getHex() !== 0; o.geometry = soften(o.geometry);
         o.material = glows ? new THREE.MeshBasicMaterial({ color: m.color, map: m.map }) : new THREE.MeshLambertMaterial({ color: m.color, map: m.map, flatShading: true });
         o.castShadow = true; o.receiveShadow = true;
       });
@@ -267,7 +273,7 @@ class Region {
     const tris = []; for (let j = 0; j < D - 1; j++) for (let i = 0; i < W - 1; i++) {
       if (!draw[(j0 + j) * NV + i0 + i]) continue; const a = j * W + i, b = a + W, d = a + 1, cc = b + 1; tris.push(a, b, d, b, cc, d);
     }
-    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); tg.setAttribute('color', new THREE.BufferAttribute(col, 3)); tg.setIndex(tris); tg.computeBoundingSphere();
+    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); tg.setAttribute('color', new THREE.BufferAttribute(col, 3)); tg.setIndex(tris); tg.computeBoundingSphere(); tg.computeVertexNormals();
     const tmat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     if (ART.ground) { // custom ground texture, tinted by the biome colours
       const uv = new Float32Array(W * D * 2), sz = ART.ground.size; for (let o = 0; o < W * D; o++) { uv[o * 2] = pos[o * 3] / sz; uv[o * 2 + 1] = pos[o * 3 + 2] / sz; }
@@ -319,17 +325,18 @@ class Region {
         im.count = pts.length;
         pts.forEach((p, i) => {
           dummy.position.set(p.x, p.h + yo * p.s - 0.08, p.z); dummy.rotation.set(0, p.rot, 0); dummy.scale.set(sc[0] * p.s, sc[1] * p.s, sc[2] * p.s); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix);
-          tmpC.setHex(def.flower ? FLOWERS[Math.floor(p.v * FLOWERS.length)] : color).multiplyScalar(0.85 + p.v * 0.3); im.setColorAt(i, tmpC);
+          tmpC.setHex(def.flower ? FLOWERS[Math.floor(p.v * FLOWERS.length)] : FELT.on && geo === 'sph' ? woolTint(color, (p.v * 7.31 + def.parts.indexOf(part) * 0.37) % 1) : color).multiplyScalar(0.85 + p.v * 0.3); im.setColorAt(i, tmpC);
         });
         im.castShadow = !gl && def.r > 0; im.receiveShadow = false; im.frustumCulled = false; g.add(im); this.propMeshes.push({ im, biome: id });
       }
     }
     const grassMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, side: THREE.DoubleSide });
-    const grass = new THREE.InstancedMesh(PG.blade, grassMat, GRASS[id]); let gi = 0;
-    for (let t = 0; t < GRASS[id] * 12 && gi < GRASS[id]; t++) {
+    const grass = new THREE.InstancedMesh(FELT.on ? TUFT : PG.blade, grassMat, GRASS[id]); let gi = 0;
+    const nGrass = FELT.on ? GRASS[id] >> 1 : GRASS[id];
+    for (let t = 0; t < GRASS[id] * 12 && gi < nGrass; t++) {
       const x = rx(), z = rz(); if (!this.okSpot(x, z, false)) continue;
-      const s = 0.7 + R() * 0.9; dummy.position.set(x, heightAt(x, z) - 0.05, z); dummy.rotation.set((R() - 0.5) * 0.4, R() * 6.28, (R() - 0.5) * 0.4); dummy.scale.set(s, s * (0.8 + R() * 0.8), s); dummy.updateMatrix();
-      grass.setMatrixAt(gi, dummy.matrix); tmpC.setHex(BIOME[id].grass).multiplyScalar(0.75 + R() * 0.45); grass.setColorAt(gi, tmpC); gi++;
+      const s = 0.7 + R() * 0.9; dummy.position.set(x, heightAt(x, z) - 0.05, z); dummy.rotation.set((R() - 0.5) * 0.4, R() * 6.28, (R() - 0.5) * 0.4); if (FELT.on) dummy.scale.set(s * 0.75, s * (0.3 + R() * 0.25), s * 0.75); else dummy.scale.set(s, s * (0.8 + R() * 0.8), s); dummy.updateMatrix();   // felt: little round tufts
+      grass.setMatrixAt(gi, dummy.matrix); tmpC.setHex(BIOME[id].grass).multiplyScalar(0.75 + R() * 0.45); if (FELT.on) tmpC.lerp(cT.setHex(R() < 0.25 ? 0x8a8a3a : 0x3f6a34), 0.45).multiplyScalar(0.8); grass.setColorAt(gi, tmpC); gi++;
     }
     grass.count = gi; grass.frustumCulled = false; g.add(grass); this.propMeshes.push({ im: grass, biome: id });
   }
@@ -383,7 +390,7 @@ class Region {
     // Lantern Tree
     const tree = new THREE.Group(); tree.position.set(0, y0, 0); g.add(tree);
     mesh(PG.cyl, lit(0x6b4a2b), 3.2, 10, 3.2, 0, 0, 0, tree);
-    for (const [x, y, z, s, cl] of [[0, 9, 0, 11, 0x3f9a3c], [3.5, 11.5, 1, 7, 0x58b84a], [-3, 11, -2, 7.5, 0x4aa641], [0.5, 13, -1, 6, 0x7fd060]]) { const cm = lit(cl); cm.transparent = true; this.canopy.push(cm); mesh(PG.sph, cm, s, s * 0.8, s, x, y, z, tree); }
+    for (const [x, y, z, s, cl] of [[0, 9, 0, 11, 0x3f9a3c], [3.5, 11.5, 1, 7, 0x58b84a], [-3, 11, -2, 7.5, 0x4aa641], [0.5, 13, -1, 6, 0x7fd060]]) { const cm = lit(FELT.on ? woolTint(cl, x * 0.13 + z * 0.29 + 0.5) : cl); cm.transparent = true; this.canopy.push(cm); mesh(PG.sph, cm, s, s * 0.8, s, x, y, z, tree); }
     const lm = glow(0xffd98a); this.lanternOn = lm; this.lanternOff = glow(0x4a4234); this.lanterns = [];
     for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28, r = 3.5 + (i % 3); this.lanterns.push(mesh(PG.sph, lm, 0.45, 0.6, 0.45, Math.cos(a) * r, 6.2 + (i % 2) * 1.2, Math.sin(a) * r, tree, false)); }
     const pl = new THREE.PointLight(0xffd98a, 60, 38, 1.6); pl.position.set(0, 6, 0); tree.add(pl); this.treeLight = pl;

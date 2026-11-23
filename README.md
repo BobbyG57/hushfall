@@ -54,7 +54,8 @@ explore. Add `?slot=name` to the address for a second save file.
 ## Make it your own
 
 The default view is a fixed high-angle camera; the over-the-shoulder camera is
-under Menu, Status, View. To add your own 3D models (for example from Blender),
+under Menu, Status, View. Menu, Status, Look switches to a felt stop-motion look
+(a prototype). To add your own 3D models (for example from Blender),
 sprites, ground textures, colours and title, and to find where names, dialogue
 and stats live, see [CUSTOMIZE.md](CUSTOMIZE.md). The hero is a 3D model made
 in Blender; add `?art=none` to the address to see the original blocky hero.

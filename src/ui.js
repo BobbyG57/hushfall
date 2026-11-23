@@ -7,6 +7,7 @@ import { MEMORIES, LULLABY, objectiveFor, EL, KITH, ARTS, SKILLS, RARITY, QUESTS
 import { partyList, activeKith, partyMax, artCooldown, kithPower, summonActive } from './kith.js';
 import { MAP, memoriesFound } from './world.js';
 import { storeOpts, loadSave, storeSave, exportCode, importCode, transferLink } from './save.js';
+import { FELT } from './felt.js';
 import { clamp } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -183,6 +184,7 @@ export const ui = {
         { label: 'View: ' + (G.opts.camera === 'free' ? 'Free camera (behind the hero)' : 'Classic (fixed overhead)'), act: () => { G.opts.camera = G.opts.camera === 'free' ? 'classic' : 'free'; G.cam.pitch = 0.34; G.cam.yaw = G.player.yaw + Math.PI; storeOpts(G.opts); } },
         { label: 'Free camera Y: ' + (G.opts.invertY ? 'Inverted' : 'Normal'), act: () => { G.opts.invertY = !G.opts.invertY; storeOpts(G.opts); } },
         { label: 'Volume: ' + Math.round(G.opts.volume * 100) + '%', act: () => { let v = G.opts.volume + 0.2; if (v > 1.01) v = 0; audio.setVolume(Math.round(v * 10) / 10); storeOpts(G.opts); } },
+        { label: 'Look: ' + (FELT.on ? 'Felt (prototype)' : 'Classic'), act: () => this.confirm('Switch to the ' + (FELT.on ? 'classic' : 'felt') + ' look? The game saves and reloads.', () => { G.opts.look = FELT.on ? 'classic' : 'felt'; storeOpts(G.opts); G.game.save(); const u = new URL(location.href); u.searchParams.delete('look'); location.href = u.toString(); }) },
         { label: 'Graphics: ' + (G.opts.quality ? 'High' : 'Fast'), act: () => { G.opts.quality = G.opts.quality ? 0 : 1; storeOpts(G.opts); G.game.applyQuality(); } },
         { label: 'Toggle fullscreen', act: () => { if (document.fullscreenElement) document.exitFullscreen(); else { const r = document.documentElement.requestFullscreen(); if (r && r.catch) r.catch(() => this.toast('Click this option with the mouse, or press Ctrl+Cmd+F, to go fullscreen.')); } } },
         { label: 'Quit to title', act: () => this.confirm('Save and return to the title screen?', () => { this.closeMenu(true); G.game.quit(); }) },

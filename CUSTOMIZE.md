@@ -14,6 +14,27 @@ replaces one built-in piece.
   Raise `pitch` (up to about 1.3) for more top-down, lower it for more side-on.
   Lower `fov` for a flatter, more "2D" feel.
 
+### The felt look (a prototype)
+
+A second look makes Vael into a stop-motion set made of felt. Switch it on under
+Menu, Status, Look (the game saves and reloads), or add `?look=felt` to the
+address (`?look=classic` goes back). It changes how things are drawn, not what
+they are, so it works with everything, including your Blender pieces:
+
+- Every surface gets felt fibres and broad felted patches, rounded soft shading,
+  and a fuzzy sheen toward its edges. Tree canopies become clumps of wool balls
+  in mixed greens and mustard, and grass becomes little felt tufts.
+- Warm studio light, soft shadows and a hazy backdrop.
+- The picture is finished like a photographed miniature: tilt-shift blur above
+  and below the middle of the screen, warm grading, a vignette and film grain.
+- Characters change pose twelve times a second, like puppets moved between
+  photographs, while the camera and controls stay smooth.
+
+The settings are in `src/felt.js`: the fibre texture and how strongly it shows
+(`feltShader`), the wool colours (`WOOL`), the blur (`focusY`, `band`,
+`amount`), the grading, and the frame rate of the poses (`step`, 1/12 of a
+second).
+
 ## 2. Your own art: `assets/art.json`
 
 Put image files and 3D models in the `assets/` folder and list them in

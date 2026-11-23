@@ -5,6 +5,7 @@ import { EL, KITH } from './data.js';
 import { lerp, damp, angDiff } from './util.js';
 import { G } from './state.js';
 import { ART } from './art.js';
+import { FELT } from './felt.js';
 
 export const GEO = {
   box: new THREE.BoxGeometry(1, 1, 1),
@@ -518,6 +519,9 @@ export function addXray(M) {
 }
 
 export function animate(M, a, dt) {
+  // the felt look: poses change only twelve times a second, like a puppet moved between photographs
+  if (FELT.on && M.smAcc !== undefined) { M.smAcc += dt; if (!FELT.tick) { M.tick(dt); return; } dt = M.smAcc; }
+  M.smAcc = 0;
   switch (M.kind) {
     case 'sprite': animSprite(M, a, dt); break;
     case 'glb': animGlb(M, a, dt); break;
