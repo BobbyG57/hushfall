@@ -6,18 +6,18 @@ Run by Blender (the two .command files in blender/ do this for you):
   Blender --background --factory-startup --python-exit-code 1 --python tools/world/blender.py -- bring
 
 send   Makes blender/world.blend from the game's world, or refreshes it:
-         Terrain   the whole valley as one mesh, 1 Blender unit = 1 game unit, coloured by region
-                   (roads tan, rock grey, snow white). Blender X = game x, Blender Y = north
-                   (game -z), Blender Z = height.
+         Terrain   the valley as five meshes, one per zone, each in its own collection. 1 Blender
+                   unit = 1 game unit, coloured by region (roads tan, rock grey, snow white).
+                   Blender X = game x, Blender Y = north (game -z), Blender Z = height.
          Places    an arrow for every waystone, shrine, camp, grove and rift in src/data.js (for
                    reference: moving them here does not move them in the game).
          Kit       a shelf of building pieces north of the map. Made once, then yours to change.
          Placed    your copies of Kit pieces, set out on the terrain.
-       If world.blend already exists, only Terrain and Places are refreshed, and only when the
-       terrain has no sculpting that still needs bringing into the game.
-bring  Reads blender/world.blend back: the Terrain's shape becomes assets/world/sculpt.bin (the
-       difference from the generated land), every Kit piece is saved as assets/models/kit/<name>.glb,
-       and Placed is listed in assets/world/placed.json. Then run tools/world/make_world.py, which
+       If world.blend already exists, only Terrain and Places are refreshed, and only when no
+       zone has sculpting that still needs bringing into the game.
+bring  Reads blender/world.blend back: what you changed in the zones becomes
+       assets/world/sculpt.bin (the difference from the generated land), every Kit piece is saved
+       as assets/models/kit/<name>.glb, and Placed is listed in assets/world/placed.json. Then run tools/world/make_world.py, which
        lays the sculpting over the land and checks every place can still be reached.
 """
 import bpy, bmesh, json, math, os, re, sys
@@ -28,7 +28,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 WORLD = os.path.join(ROOT, 'assets', 'world')
 KITDIR = os.path.join(ROOT, 'assets', 'models', 'kit')
 BLEND = os.path.join(ROOT, 'blender', 'world.blend')
-BROUGHT = os.path.join(ROOT, 'blender', 'world.brought')   # a fingerprint of the Terrain last brought into the game
+BROUGHT = os.path.join(ROOT, 'blender', 'world.brought')   # fingerprints of the zones last brought into the game
 HALF = 320.0
 
 
@@ -41,7 +41,7 @@ def grid():
 
 
 def fingerprint(obj):
-    """Identifies the shape of the Terrain mesh, to tell whether it has been sculpted since."""
+    """Identifies the shape of a terrain mesh, to tell whether it has been sculpted since."""
     import hashlib
     co = np.zeros(len(obj.data.vertices) * 3, np.float32); obj.data.vertices.foreach_get('co', co)
     return hashlib.sha1(np.round(co, 2).astype('<f4').tobytes()).hexdigest()
@@ -75,45 +75,86 @@ def terrain_colours(H, roads, regions, CELL):
     return np.concatenate([c, np.ones(c.shape[:2] + (1,))], -1).astype(np.float32)
 
 
-def make_terrain(N, NV, CELL, H, roads, regions):
-    xs = -HALF + np.arange(NV) * CELL; X, Z = np.meshgrid(xs, xs)
-    co = np.stack([X, -Z, H], -1).reshape(-1, 3).astype(np.float32)
-    jj, ii = np.meshgrid(np.arange(N), np.arange(N), indexing='ij'); a = (jj * NV + ii).ravel()
-    idx = np.stack([a, a + NV, a + NV + 1, a + 1], -1).ravel().astype(np.int32)
-    me = bpy.data.meshes.new('Terrain')
-    me.vertices.add(NV * NV); me.vertices.foreach_set('co', co.ravel())
-    me.loops.add(len(idx)); me.loops.foreach_set('vertex_index', idx)
-    me.polygons.add(N * N); me.polygons.foreach_set('loop_start', np.arange(0, len(idx), 4, dtype=np.int32))
-    me.update(calc_edges=True); me.validate()
-    ca = me.color_attributes.new('Region', 'BYTE_COLOR', 'POINT'); ca.data.foreach_set('color', terrain_colours(H, roads, regions, CELL).ravel())
+# the five zones, each its own object in its own collection (Blender colour tags)
+ZONES = [(0, 'meadow', 'Lanternrest Meadow', 'COLOR_04'), (1, 'ember', 'Emberridge', 'COLOR_01'), (2, 'gloam', 'Gloamwood', 'COLOR_06'),
+         (3, 'tide', 'Mirrormere', 'COLOR_05'), (4, 'storm', 'Stormreach', 'COLOR_03')]
+
+
+def terrain_material():
     mat = bpy.data.materials.get('Terrain') or bpy.data.materials.new('Terrain'); nodes_on(mat)
     nt = mat.node_tree; bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
     attr = next((n for n in nt.nodes if n.type == 'VERTEX_COLOR'), None) or nt.nodes.new('ShaderNodeVertexColor')
     attr.layer_name = 'Region'; nt.links.new(attr.outputs[0], bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = 1.0
     mat.diffuse_color = (0.35, 0.55, 0.3, 1)
-    me.materials.append(mat)
-    return me
+    return mat
 
 
-def terrain_heights(obj, NV, CELL):
-    """The sculpted Terrain, sampled back onto the game's grid."""
-    me = obj.data; n = len(me.vertices); co = np.zeros(n * 3, np.float32); me.vertices.foreach_get('co', co)
-    co = co.reshape(-1, 3); M = np.array(obj.matrix_world)
-    co = co @ M[:3, :3].T + M[:3, 3]
+def make_zones(N, NV, CELL, H, roads, regions, parent):
+    """One mesh per zone. Each square of the grid goes to the zone it lies in, and the points along a
+    border are shared, so the zones meet without gaps. Every point remembers where it is on the game's
+    grid (gid) and the height it was sent with (sent), so only what you change comes back."""
     xs = -HALF + np.arange(NV) * CELL; X, Z = np.meshgrid(xs, xs)
-    if n == NV * NV and np.abs(co[:, 0] - X.ravel()).max() < 0.4 and np.abs(co[:, 1] + Z.ravel()).max() < 0.4:
-        return co[:, 2].reshape(NV, NV), None
-    # the mesh was remeshed or pushed sideways: look straight down onto it at every grid point instead
-    from mathutils.bvhtree import BVHTree
-    dg = bpy.context.evaluated_depsgraph_get(); bvh = BVHTree.FromObject(obj, dg)
-    out = np.full((NV, NV), np.nan, np.float32); Mi = obj.matrix_world.inverted(); d = (Mi.to_3x3() @ np.array([0, 0, -1.0]))
-    from mathutils import Vector
-    dv = Vector(d).normalized()
-    for j in range(NV):
-        for i in range(NV):
-            hit = bvh.ray_cast(Mi @ Vector((xs[i], -xs[j], 900.0)), dv)
-            if hit[0] is not None: out[j, i] = (obj.matrix_world @ hit[0]).z
-    return out, 'sampled by looking down onto the mesh'
+    CO = np.stack([X, -Z, H], -1).reshape(-1, 3).astype(np.float32)
+    RGBA = terrain_colours(H, roads, regions, CELL).reshape(-1, 4)
+    jj, ii = np.meshgrid(np.arange(N), np.arange(N), indexing='ij'); a = (jj * NV + ii).ravel()
+    quads = np.stack([a, a + NV, a + NV + 1, a + 1], -1); lab = regions[:N, :N].ravel()
+    mat = terrain_material(); out = []
+    for k, _, name, tag in ZONES:
+        q = quads[lab == k]
+        if not len(q): continue
+        used = np.unique(q); loc = np.searchsorted(used, q).ravel().astype(np.int32)
+        me = bpy.data.meshes.new(name)
+        me.vertices.add(len(used)); me.vertices.foreach_set('co', CO[used].ravel())
+        me.loops.add(len(loc)); me.loops.foreach_set('vertex_index', loc)
+        me.polygons.add(len(q)); me.polygons.foreach_set('loop_start', np.arange(0, len(loc), 4, dtype=np.int32))
+        me.update(calc_edges=True); me.validate()
+        me.color_attributes.new('Region', 'BYTE_COLOR', 'POINT').data.foreach_set('color', RGBA[used].ravel())
+        me.attributes.new('gid', 'INT', 'POINT').data.foreach_set('value', used.astype(np.int32))
+        me.attributes.new('sent', 'FLOAT', 'POINT').data.foreach_set('value', CO[used, 2])
+        me.materials.append(mat)
+        c = coll(name, parent); c.color_tag = tag
+        o = bpy.data.objects.new(name, me); c.objects.link(o); o['sent'] = fingerprint(o); out.append(o)
+    return out
+
+
+def terrain_objects():
+    tc = bpy.data.collections.get('Terrain')
+    return sorted((o for o in tc.all_objects if o.type == 'MESH'), key=lambda o: o.name) if tc else []
+
+
+def read_terrain(objs, H, NV, CELL):
+    """Your sculpting, laid onto the game's grid: the new height wherever a zone was changed (where two
+    zones share a border point and both changed it, their average), and the game's height elsewhere."""
+    flat = H.ravel(); acc = np.zeros(NV * NV); cnt = np.zeros(NV * NV); notes = []
+    for o in objs:
+        me = o.data; n = len(me.vertices); co = np.zeros(n * 3, np.float32); me.vertices.foreach_get('co', co)
+        M = np.array(o.matrix_world); co = co.reshape(-1, 3) @ M[:3, :3].T + M[:3, 3]
+        gid = me.attributes.get('gid'); sent = me.attributes.get('sent')
+        if gid is not None and len(gid.data) == n:
+            g = np.zeros(n, np.int32); gid.data.foreach_get('value', g)
+            base = flat[g]
+            if sent is not None: base = np.zeros(n, np.float32); sent.data.foreach_get('value', base)
+            ch = np.abs(co[:, 2] - base) > 0.02
+            np.add.at(acc, g[ch], co[ch, 2]); np.add.at(cnt, g[ch], 1)
+        elif n == NV * NV:      # a whole-valley mesh, as older files had
+            ch = np.abs(co[:, 2] - flat) > 0.02; acc[ch] += co[ch, 2]; cnt[ch] += 1
+        else:                   # remeshed: look straight down onto it at every grid point it covers
+            from mathutils.bvhtree import BVHTree
+            from mathutils import Vector
+            bvh = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get()); Mi = o.matrix_world.inverted()
+            dv = (Mi.to_3x3() @ Vector((0, 0, -1.0))).normalized(); xs = -HALF + np.arange(NV) * CELL
+            x0, y0 = co[:, 0].min(), co[:, 1].min(); x1, y1 = co[:, 0].max(), co[:, 1].max()
+            for j in range(NV):
+                if not (y0 - 1 <= -xs[j] <= y1 + 1): continue
+                for i in range(NV):
+                    if not (x0 - 1 <= xs[i] <= x1 + 1): continue
+                    hit = bvh.ray_cast(Mi @ Vector((xs[i], -xs[j], 900.0)), dv)
+                    if hit[0] is not None:
+                        z = (o.matrix_world @ hit[0]).z; c = j * NV + i
+                        if abs(z - flat[c]) > 0.02: acc[c] += z; cnt[c] += 1
+            notes.append(o.name + ' was remeshed, so it was read by looking down onto it')
+    out = flat.copy(); m = cnt > 0; out[m] = acc[m] / cnt[m]
+    return out.reshape(NV, NV), notes
 
 
 # ---------------------------------------------------------------- places from data.js
@@ -124,7 +165,7 @@ def places():
     except Exception as e: print('  (could not read the places from src/data.js: %s)' % e); return None
 
 
-def make_places(P, H, CELL, col):
+def make_places(P, H, regions, CELL, col):
     if not P: return
     def h(x, z):
         i = int(round((x + HALF) / CELL)); j = int(round((z + HALF) / CELL)); n = H.shape[0] - 1
@@ -138,7 +179,9 @@ def make_places(P, H, CELL, col):
     if P.get('springs'): pts.append(('Hot springs', P['springs']))
     for name, p in pts:
         o = bpy.data.objects.new(name, None); o.empty_display_type = 'SINGLE_ARROW'; o.empty_display_size = 6
-        o.location = (p['x'], -p['z'], h(p['x'], p['z'])); o.show_name = True; o.show_in_front = True; col.objects.link(o)
+        o.location = (p['x'], -p['z'], h(p['x'], p['z'])); o.show_name = True; o.show_in_front = True
+        i = min(max(int(round((p['x'] + HALF) / CELL)), 0), H.shape[0] - 1); j = min(max(int(round((p['z'] + HALF) / CELL)), 0), H.shape[0] - 1)
+        coll(ZONES[int(regions[j, i])][2] + ' places', col).objects.link(o)
 
 
 # ---------------------------------------------------------------- the kit of building pieces
@@ -308,23 +351,23 @@ def send():
     fresh = not os.path.exists(BLEND)
     if not fresh:
         bpy.ops.wm.open_mainfile(filepath=BLEND)
-        t = bpy.data.objects.get('Terrain')
-        if t:
-            fp = fingerprint(t); brought = open(BROUGHT).read().strip() if os.path.exists(BROUGHT) else ''
-            if fp not in (t.get('sent', ''), brought):
-                print('\nThe Terrain in blender/world.blend has sculpting that is not in the game yet, so it was left as it is.')
-                print('Bring it into the game first (blender/Bring world into game.command), or delete blender/world.blend to start over.\n')
-                return
-            me = t.data; bpy.data.objects.remove(t); bpy.data.meshes.remove(me)
+        try: brought = json.load(open(BROUGHT))
+        except Exception: brought = {}
+        objs = terrain_objects()
+        busy = [o.name for o in objs if fingerprint(o) not in (o.get('sent', ''), brought.get(o.name, ''))]
+        if busy:
+            print('\nSculpting in %s is not in the game yet, so the terrain was left as it is.' % ', '.join(busy))
+            print('Bring it into the game first (blender/Bring world into game.command), or delete blender/world.blend to start over.\n')
+            return
+        for o in objs: me = o.data; bpy.data.objects.remove(o); bpy.data.meshes.remove(me)
         pc = bpy.data.collections.get('Places')
         if pc:
-            for o in list(pc.objects): bpy.data.objects.remove(o)
+            for o in list(pc.all_objects): bpy.data.objects.remove(o)
     else:
         bpy.ops.wm.read_factory_settings(use_empty=True)
     sc_ = bpy.context.scene; sc_.unit_settings.system = 'METRIC'
-    tc = coll('Terrain'); t = bpy.data.objects.new('Terrain', make_terrain(N, NV, CELL, H, roads, regions)); tc.objects.link(t)
-    t['sent'] = fingerprint(t)
-    make_places(places(), H, CELL, coll('Places'))
+    make_zones(N, NV, CELL, H, roads, regions, coll('Terrain'))
+    make_places(places(), H, regions, CELL, coll('Places'))
     if fresh:
         wc = coll('Water'); wp = bpy.data.meshes.new('Water'); bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=HALF); bm.to_mesh(wp); bm.free()
         wm = bpy.data.materials.new('Water'); nodes_on(wm); b = next(n for n in wm.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
@@ -394,21 +437,21 @@ def bring():
     if not os.path.exists(BLEND): sys.exit('There is no blender/world.blend yet: send the world to Blender first.')
     bpy.ops.wm.open_mainfile(filepath=BLEND)
     N, NV, CELL, H, roads, regions, sc = grid()
-    t = bpy.data.objects.get('Terrain')
-    if not t: sys.exit('blender/world.blend has no object called Terrain.')
-    hs, how = terrain_heights(t, NV, CELL)
-    open(BROUGHT, 'w').write(fingerprint(t))
+    objs = terrain_objects()
+    if not objs: sys.exit('blender/world.blend has no terrain in its Terrain collection.')
+    hs, notes = read_terrain(objs, H, NV, CELL)
+    json.dump({o.name: fingerprint(o) for o in objs}, open(BROUGHT, 'w'))
     gen = H - sc                                   # the land as generated, before any sculpting
-    hs = np.where(np.isnan(hs), H, hs)
     d = (hs - gen).astype(np.float32); d[np.abs(d) < 0.02] = 0
     sp = os.path.join(WORLD, 'sculpt.bin')
     if d.any(): d.astype('<f4').tofile(sp)
     elif os.path.exists(sp): os.remove(sp)        # nothing sculpted: no layer
-    print('Terrain: %d spots sculpted (biggest change %.1f)%s' % (int((d != 0).sum()), float(np.abs(d).max()), ', ' + how if how else ''))
+    print('Terrain: %d spots sculpted (biggest change %.1f)' % (int((d != 0).sum()), float(np.abs(d).max())))
+    for n_ in notes: print('  ' + n_)
     # what counts: anything standing off the map (on the shelf, north of it) is a piece of the kit, and
     # anything on the map is placed. The collections only keep things tidy.
-    skip = {'Terrain', 'Places', 'Water', 'Shelf'}
-    objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and not any(c.name in skip for c in o.users_collection)]
+    land = set(terrain_objects())
+    objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o not in land and not any(c.name in ('Water', 'Shelf') for c in o.users_collection)]
     off = lambda o: max(abs(o.matrix_world.translation.x), abs(o.matrix_world.translation.y)) > HALF + 2
     kit = {}
     for o in sorted((o for o in objs if off(o)), key=lambda o: (o.name != base_name(o.name), o.name)):

@@ -253,12 +253,15 @@ into the game. There are two files to double-click in the `blender` folder:
 
 1. **Open world in Blender.command** makes `blender/world.blend` (the first time
    takes about half a minute) and opens it. Inside:
-   - **Terrain**: the whole valley as one mesh, coloured by region (roads tan,
-     rock grey, snow white). One Blender unit is one game unit (the hero is
-     about 2 tall). North is up in Top view (numpad 7).
+   - **Terrain**: the valley in five pieces, one per zone (Lanternrest Meadow,
+     Emberridge, Gloamwood, Mirrormere, Stormreach), each in its own coloured
+     collection. They are coloured by region (roads tan, rock grey, snow white).
+     One Blender unit is one game unit (the hero is about 2 tall). North is up in
+     Top view (numpad 7).
    - **Places**: an arrow for every waystone, shrine, camp, grove and rift, with
-     its name. They are there so you know what not to bury; moving them does not
-     move anything in the game (that is `src/data.js`).
+     its name, grouped by zone the same way. They are there so you know what not
+     to bury; moving them does not move anything in the game (that is
+     `src/data.js`).
    - **Kit**: a shelf of starter pieces just north of the map: cottage, chapel,
      gravestone, grave cross, fence, crop field, wheat field, haystack,
      signpost, watchtower, ruin wall, stilt hut, crag, well, lamp post and cart.
@@ -269,7 +272,19 @@ into the game. There are two files to double-click in the `blender` folder:
 3. **Bring world into game.command** reads the saved file back, rebuilds the
    world, and checks every place can still be reached. Refresh the game.
 
-**Sculpting.** Select Terrain, switch to Sculpt Mode, and use any brush (Draw,
+**Working on one zone at a time.** In the Outliner (top right), click the eye
+next to a zone's collection to hide it, or Ctrl+click the eye of the one you want
+to see only it. Or select a zone and press numpad / (View, Local View) to show it
+alone; press it again to bring the rest back. The zones meet along the region
+borders (mostly the mountain crests), sharing the points on the border, so if you
+sculpt right up to a border the next zone does not follow; smooth across it from
+that zone too.
+
+**No mouse?** On a Mac trackpad, two-finger dragging orbits the view, Shift with
+two fingers pans, and pinching zooms. In Edit, Preferences, Input, turning on
+Emulate 3 Button Mouse also lets Option and click-drag orbit.
+
+**Sculpting.** Select a zone, switch to Sculpt Mode, and use any brush (Draw,
 Clay Strips, Smooth, Flatten, Scrape, Grab). The game keeps only the up and down
 change, so a brush that drags ground sideways works, but what counts is the new
 height at each point. Your sculpting is saved as `assets/world/sculpt.bin`, a
@@ -304,8 +319,8 @@ The pieces are saved as `assets/models/kit/<name>.glb` and their places as
 
 The script behind both files is `tools/world/blender.py`. Opening the world
 again while `world.blend` exists refreshes only Terrain and Places (keeping your
-Kit and Placed), and it will not replace a Terrain that has sculpting you have
-not brought into the game yet.
+Kit and Placed), and it will not replace a zone that has sculpting you have not
+brought into the game yet.
 
 ## 6. Not swappable yet
 
