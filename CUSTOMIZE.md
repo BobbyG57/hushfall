@@ -161,11 +161,27 @@ by hand in Blender, export from Blender instead of running the script again.
 
 ### Ground and dungeon floor
 
-`ground` covers the whole outdoor world and `floor` covers shrine rooms. Use an
-image that repeats seamlessly. `size` is how many world units one copy covers
-(the hero is about 2 units tall). Keep the ground image light: each area's
-colours are laid over it, so a pale texture picks up the green of the meadow,
-the red of Emberridge, and so on.
+The outdoor ground is painted with one texture per region, plus a cliff rock
+used on steep slopes: `assets/textures/ground/meadow.jpg`, `ember.jpg`,
+`tide.jpg`, `storm.jpg`, `gloam.jpg` and `cliff.jpg`. They were made by
+`tools/textures/paint_ground.py` (run it again to repaint them, or change its
+recipes). To use your own image for any of them, list it under
+`"groundTextures"`:
+
+```json
+"groundTextures": { "meadow": { "file": "my-grass.png", "size": 7 }, "cliff": { "file": "my-rock.png" } },
+"groundStrength": 1
+```
+
+Each image should repeat seamlessly. `size` is how many world units one copy
+covers (the hero is about 2 units tall). The region's colours (see Colours
+below) still set the overall colour; the texture adds its painted detail on top,
+so any image works whatever its colours. `groundStrength` sets how strongly the
+detail shows: 0 for none, 1 as made, up to 2.
+
+An older option, `ground`, replaces all of that with one image for the whole
+world, tinted by each area's colours. `floor` covers shrine rooms. For both,
+`size` works as above.
 
 ### Colours
 
@@ -193,14 +209,112 @@ Elsewhere:
 - **Music:** the `MOODS` table in `src/audio.js` (key, scale and tempo for each
   area). Sound effects are the `SFX` table just above it.
 
-## 4. Not swappable yet
+## 4. The shape of the world
+
+The valley's ground is made ahead of time by `tools/world/make_world.py` and
+saved in `assets/world/`; the game just loads it. To change the land, change the
+script and run it again (it takes about half a minute and needs Python with
+numpy and Pillow, and Node):
+
+```bash
+python3 tools/world/make_world.py --preview /tmp/vael
+```
+
+How it builds the land: gradient noise, bent by domain warping so nothing lines
+up, for rolling ground; a different shape for each region (meadow knolls, the
+Emberridge volcano, the Mirrormere lake, Stormreach's stepped highland,
+Gloamwood's ravines); then the mountain ranges between the regions, grown the
+way real ones are: the ground along each range is pushed up (tectonic uplift)
+while rivers cut it down, each river cutting harder the more ground drains into
+it (the stream power law, solved with the method of Braun and Willett, 2013, as
+in FastScape, in `tools/world/uplift.mjs`). Over a few hundred steps the rivers
+branch back up into each range, leaving ridges, spurs, saddles and valleys
+between them. After that come droplet erosion, where about 150,000 simulated
+raindrops carve small gullies; a little thermal erosion, where rock steeper than
+its natural angle slides down; ledges, the volcano's crater, level ground for
+every place in `src/data.js`, and roads between them. The grid is 513 by 513
+points, one every 1.25 units.
+
+It also checks its own work and prints the results: that every waystone, shrine,
+camp and grove can be reached on foot, and whether any range is gentle enough to
+climb over. Places come from `src/data.js`, so moving a camp there and running
+the script again reshapes the ground around it. `--preview` saves a coloured map
+of the result to look at.
+
+Each region is loaded as its own area. Walking far enough into a pass loads the
+region on the other side, behind a short fade. The edge of each region runs
+along the crests of its mountains: you can climb a range to the top, but not
+down the far side (only the passes lead on).
+
+## 5. Sculpting the world and building on it in Blender
+
+You can reshape the land and set out buildings in Blender, then bring both back
+into the game. There are two files to double-click in the `blender` folder:
+
+1. **Open world in Blender.command** makes `blender/world.blend` (the first time
+   takes about half a minute) and opens it. Inside:
+   - **Terrain**: the whole valley as one mesh, coloured by region (roads tan,
+     rock grey, snow white). One Blender unit is one game unit (the hero is
+     about 2 tall). North is up in Top view (numpad 7).
+   - **Places**: an arrow for every waystone, shrine, camp, grove and rift, with
+     its name. They are there so you know what not to bury; moving them does not
+     move anything in the game (that is `src/data.js`).
+   - **Kit**: a shelf of starter pieces just north of the map: cottage, chapel,
+     gravestone, grave cross, fence, crop field, wheat field, haystack,
+     signpost, watchtower, ruin wall, stilt hut, crag, well, lamp post and cart.
+   - **Placed**: the pieces set out on the terrain. It starts with a small
+     chapel and graveyard east of Lanternrest and a farmstead to the west, to
+     show how it works. Move them, delete them, or add your own.
+2. Work in Blender, then save (Cmd+S).
+3. **Bring world into game.command** reads the saved file back, rebuilds the
+   world, and checks every place can still be reached. Refresh the game.
+
+**Sculpting.** Select Terrain, switch to Sculpt Mode, and use any brush (Draw,
+Clay Strips, Smooth, Flatten, Scrape, Grab). The game keeps only the up and down
+change, so a brush that drags ground sideways works, but what counts is the new
+height at each point. Your sculpting is saved as `assets/world/sculpt.bin`, a
+layer laid over the generated land, so it survives the generator being run
+again. The road colours stay where the generator put them, so if you raise a
+hill across a road, the road climbs it. If the check after bringing it in says a
+place is unreachable, smooth the slope near it in Blender and bring it in again.
+To throw your sculpting away, delete `assets/world/sculpt.bin` and
+`blender/world.blend`, then open the world in Blender again.
+
+**Placing pieces.** Select a piece on the shelf, press Alt+D (or Shift+D), and
+move the copy onto the terrain. Anything standing on the map counts as placed,
+and anything on the shelf north of the map counts as a piece, whichever
+collection it is in (the Placed collection just keeps things tidy). Turn a piece
+with R Z, and scale it with S. Each piece's origin (the small dot) is its
+footing: in the game it stands on the ground at that point, at the same height
+above or below the ground as in Blender, so pieces stay on the ground even if
+you sculpt under them later.
+
+**Changing a piece or making your own.** Edit any shelf piece and every copy of
+it changes in the game. For a new piece, build it on the shelf (north of the
+map) with its origin at its base, join its parts into one object (Ctrl+J),
+and give it a short name; that name is the piece. Colours come from its
+materials. A material with Emission turned on (any strength) glows at night,
+like the windows. Pieces block your path by their footprint; to let the hero
+walk through one (like the fields), add a custom property `solid` set to `0`
+(Object properties, Custom Properties).
+
+The pieces are saved as `assets/models/kit/<name>.glb` and their places as
+`assets/world/placed.json`. `blender/world.blend` itself stays on this computer
+(it is rebuilt from those files if it goes missing, your own pieces included).
+
+The script behind both files is `tools/world/blender.py`. Opening the world
+again while `world.blend` exists refreshes only Terrain and Places (keeping your
+Kit and Placed), and it will not replace a Terrain that has sculpting you have
+not brought into the game yet.
+
+## 6. Not swappable yet
 
 These need a little code first, so ask for them when you want them: your own
-trees, rocks and buildings (as 3D models or sprites), a different ground
-texture for each area, music or sound files, and creature portraits in the
-menus.
+trees and rocks in place of the scattered built-in ones (buildings and other
+pieces you place yourself already work, see section 5), music or sound files,
+and creature portraits in the menus.
 
-## 5. Seeing your changes
+## 7. Seeing your changes
 
 Run the game from this folder (double-click `Play Hushfall.command`) and refresh
 the page after each change. The live link only changes when the folder is

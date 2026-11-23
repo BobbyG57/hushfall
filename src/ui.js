@@ -5,6 +5,7 @@ import { audio } from './audio.js';
 import { fx } from './fx.js';
 import { MEMORIES, LULLABY, objectiveFor, EL, KITH, ARTS, SKILLS, RARITY, QUESTS, WAYSTONES, SHRINES, KTABLE, BIOME, VEIL_REQ, PASS, kithName, isEvolved, xpNext, kithXpNext, bladeCost, vitCost, flaskCost, MAX_BLADE, MAX_VIT, MAX_FLASK, STARTERS } from './data.js';
 import { partyList, activeKith, partyMax, artCooldown, kithPower, summonActive } from './kith.js';
+import { MAP, memoriesFound } from './world.js';
 import { storeOpts, loadSave, storeSave, exportCode, importCode, transferLink } from './save.js';
 import { clamp } from './util.js';
 
@@ -157,7 +158,7 @@ export const ui = {
   memoryTab() {
     const regions = ['meadow', 'ember', 'tide', 'storm', 'gloam'];
     return { name: 'Memories', title: 'Echo Shard memories', items: () => {
-      const found = G.world.memoriesFound(), total = Object.keys(G.save.shards).length, list = [];
+      const found = memoriesFound(), total = Object.keys(G.save.shards).length, list = [];
       for (const b of regions) MEMORIES[b].forEach((m, i) => { const has = i < (found[b] || 0); list.push({ m: has ? m : null, label: has ? m.title : '? ? ?', right: BIOME[b].name }); });
       list.push({ m: total >= 16 ? LULLABY : null, label: total >= 16 ? LULLABY.title : '? ? ?', right: 'All 16 shards' });
       return list;
@@ -278,7 +279,7 @@ export const ui = {
   icons(c, toX, toZ, big) {
     const s = G.save, q = objectiveFor(s).at;
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `${big ? 16 : 13}px sans-serif`;
-    for (const p of G.world.pois) {
+    for (const p of MAP.pois) {
       const x = toX(p.x), y = toZ(p.z); if (x < -10 || y < -10 || x > c.canvas.width + 10 || y > c.canvas.height + 10) continue;
       if (p.type === 'way') { c.fillStyle = s.waystones[p.id] ? '#6ff0ff' : '#7b8090'; c.fillText('◆', x, y); }
       else if (p.type === 'shrine') { c.fillStyle = s.shrines[p.id] ? EL[p.el].css : '#ffffff'; c.fillText('▲', x, y); }
@@ -291,7 +292,7 @@ export const ui = {
   },
   drawMap() {
     const cv = $('mapc'); if (!cv) return; const c = cv.getContext('2d'), W = cv.width, k = W / 640, toX = (x) => (x + 320) * k, toZ = (z) => (z + 320) * k;
-    c.drawImage(G.world.mapCanvas, 0, 0, W, W);
+    c.drawImage(MAP.canvas, 0, 0, W, W);
     for (const b in PASS) if (!G.save.shrines[VEIL_REQ[b]]) { const p = PASS[b]; c.fillStyle = 'rgba(20,10,40,.85)'; c.beginPath(); c.arc(toX(p.x), toZ(p.z), 9, 0, 6.3); c.fill(); c.fillStyle = '#b06cff'; c.font = '11px sans-serif'; c.textAlign = 'center'; c.fillText('sealed', toX(p.x), toZ(p.z) + 20); }
     const q = this.icons(c, toX, toZ, true);
     c.strokeStyle = '#ffd98a'; c.lineWidth = 2; c.beginPath(); c.arc(toX(q[0]), toZ(q[1]), 11, 0, 6.3); c.stroke();
@@ -307,9 +308,9 @@ export const ui = {
       for (const R of A.rects) { c.fillStyle = R.corr ? (R.locked ? '#4a2f6a' : '#3a3850') : (R.state === 'cleared' || R.state === 'open' ? '#3a3850' : '#5a3a4a'); c.fillRect(toX(R.x0), toZ(R.z0), (R.x1 - R.x0) * sc, (R.z1 - R.z0) * sc); }
       for (const e of G.enemies) if (!e.dead) { c.fillStyle = '#ff5a6a'; c.fillRect(toX(e.pos.x) - 2, toZ(e.pos.z) - 2, 4, 4); }
     } else {
-      const span = 150, k = 257 / 640, toX = (x) => W / 2 + (x - p.x) * W / span, toZ = (z) => W / 2 + (z - p.z) * W / span;
+      const span = 150, k = MAP.canvas.width / 640, toX = (x) => W / 2 + (x - p.x) * W / span, toZ = (z) => W / 2 + (z - p.z) * W / span;
       c.fillStyle = '#1a1626'; c.fillRect(0, 0, W, W);
-      c.drawImage(G.world.mapCanvas, (p.x + 320 - span / 2) * k, (p.z + 320 - span / 2) * k, span * k, span * k, 0, 0, W, W);
+      c.drawImage(MAP.canvas, (p.x + 320 - span / 2) * k, (p.z + 320 - span / 2) * k, span * k, span * k, 0, 0, W, W);
       const q = this.icons(c, toX, toZ, false);
       for (const e of G.enemies) if (!e.dead && (e.aggro || e.wild)) { c.fillStyle = e.wild ? '#8af0a0' : '#ff5a6a'; c.fillRect(toX(e.pos.x) - 2, toZ(e.pos.z) - 2, 4, 4); }
       let qx = toX(q[0]) - W / 2, qy = toZ(q[1]) - W / 2; const d = Math.hypot(qx, qy), lim = W / 2 - 12; if (d > lim) { qx *= lim / d; qy *= lim / d; }

@@ -2,3 +2,6 @@
 node_modules/
 __pycache__/
 *.pyc
+blender/world.blend
+blender/world.blend1
+blender/world.brought

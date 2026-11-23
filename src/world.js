@@ -1,17 +1,20 @@
-// The overworld: one seamless heightfield with five biomes, props, a village, and points of interest.
+// The overworld: five regions (the meadow and the four beyond its passes), each loaded as its own
+// area. They share one coordinate system and one heightfield (terrain.js, made by
+// tools/world/make_world.py); walking far enough into a pass loads the region on the other side.
 import * as THREE from 'three';
 import { G } from './state.js';
-import { clamp, lerp, smooth, fbm, noise, rng, rand, weighted } from './util.js';
-import { BIOME, PASS, WAYSTONES, SHRINES, CAMPS, KZONES, KTABLE, RIFTS, NPCS, EL, VEIL_REQ, EXTRA_ZONES, SPRINGS } from './data.js';
+import { clamp, lerp, smooth, noise, rng, rand, weighted } from './util.js';
+import { BIOME, PASS, WAYSTONES, SHRINES, CAMPS, KZONES, KTABLE, RIFTS, NPCS, EL, VEIL_REQ, EXTRA_ZONES, SPRINGS, VOLCANO } from './data.js';
 import { makeNpcModel, animate } from './models.js';
 import { spawnEnemy, spawnWild } from './enemies.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
 import { ART } from './art.js';
+import { T, NV, CELL, HALF, REGION_NAMES, heightAt, regionAt, roadAt, reachAt, inPass } from './terrain.js';
+
 
 // The Hush greys each region until its shrine wakes (STORY.md, section 8). The meadow only greys toward
 // its edges, so Lanternrest keeps its colour. When a shrine wakes, the colour floods back over a few seconds.
-const REGIONS = ['meadow', 'ember', 'tide', 'storm', 'gloam'];
 const HUSH_SHRINE = { meadow: 'roots', ember: 'cinders', tide: 'tides', storm: 'gales', gloam: 'hollow' };
 const HUSH_MAX = { meadow: 0.45, ember: 0.55, tide: 0.55, storm: 0.55, gloam: 0.5 };
 const meadowEdge = (r) => smooth(30, 105, r);
@@ -22,50 +25,72 @@ function greyed(arr, i, base, k) {   // move one rgb triple from its base colour
   arr[i] = r + (l - r) * k; arr[i + 1] = g + (l - g) * k; arr[i + 2] = b + (l * 1.04 - b) * k;
 }
 
+// the region on the far side of whichever pass a point is in (by the old straight lines)
+const outerOf = (x, z) => (Math.abs(x) > Math.abs(z) ? (x > 0 ? 'ember' : 'gloam') : (z > 0 ? 'tide' : 'storm'));
+export const biomeAt = regionAt;
+// how much a spot belongs to the region beyond the meadow (blended only inside the passes)
+function regionBlend(x, z) {
+  const reg = regionAt(x, z);
+  if (inPass(x, z)) return { b: outerOf(x, z), w: smooth(112, 138, Math.hypot(x, z)) };
+  return reg === 'meadow' ? { b: outerOf(x, z), w: 0 } : { b: reg, w: 1 };
+}
+
+// The painted ground (ART.groundTex, from art.js): each region's texture is blended in by how much a
+// spot belongs to that region, and steep slopes take the cliff rock, mapped from three sides so it
+// does not stretch. Textures add their painted detail on top of the vertex colours (which carry the
+// region palette, rock, snow, sand, roads and the Hush grey), so dividing by each texture's average
+// colour keeps the overall colours where they were.
+function groundShader(geo, mat, reg) {
+  const T2 = ART.groundTex;
+  geo.setAttribute('aRegion', new THREE.BufferAttribute(reg, 4));
+  const names = ['meadow', 'ember', 'tide', 'storm', 'gloam', 'cliff'];
+  mat.customProgramCacheKey = () => 'hushfall-ground';
+  mat.onBeforeCompile = (sh) => {
+    for (const k of names) { sh.uniforms['t_' + k] = { value: T2[k].tex }; sh.uniforms['m_' + k] = { value: T2[k].mean }; sh.uniforms['s_' + k] = { value: 1 / T2[k].size }; }
+    sh.uniforms.uGround = { value: ART.groundStrength };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec4 aRegion; varying vec4 vRegion; varying vec3 vGPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRegion = aRegion; vGPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec4 vRegion; varying vec3 vGPos; uniform float uGround;
+${names.map((k) => `uniform sampler2D t_${k}; uniform vec3 m_${k}; uniform float s_${k};`).join('\n')}
+vec3 gtex(sampler2D t, vec3 m, float s, vec2 p) { return (texture2D(t, p * s).rgb * 0.68 + texture2D(t, p * s * 0.37 + 0.31).rgb * 0.32) / m; }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec2 p = vGPos.xz; float wo = vRegion.x + vRegion.y + vRegion.z + vRegion.w;
+  vec3 g = gtex(t_meadow, m_meadow, s_meadow, p) * (1.0 - wo) + gtex(t_ember, m_ember, s_ember, p) * vRegion.x
+    + gtex(t_tide, m_tide, s_tide, p) * vRegion.y + gtex(t_storm, m_storm, s_storm, p) * vRegion.z + gtex(t_gloam, m_gloam, s_gloam, p) * vRegion.w;
+  vec3 nrm = normalize(cross(dFdx(vGPos), dFdy(vGPos))), b = abs(nrm); b /= b.x + b.y + b.z;
+  vec3 c = (texture2D(t_cliff, vGPos.zy * s_cliff).rgb * b.x + texture2D(t_cliff, vGPos.xz * s_cliff).rgb * b.y + texture2D(t_cliff, vGPos.xy * s_cliff).rgb * b.z) / m_cliff;
+  g = mix(g, c, 1.0 - smoothstep(0.62, 0.84, abs(nrm.y)));
+  diffuseColor.rgb *= mix(vec3(1.0), clamp(g, 0.0, 2.5), uGround);
+}`);
+  };
+}
+
 // conditions for story spots in EXTRA_ZONES
 const ZONE_COND = {
   stray: (s) => s.quest >= 1 && !s.kith.some((k) => k.species === 'cinderpup'),   // only if you have no Cinderpup
 };
 
-const SIZE = 640, HALF = 320, N = 256, CELL = SIZE / N, NV = N + 1;
-const H = new Float32Array(NV * NV);
+// collision circles (trees, rocks, huts), in one grid shared by every region
 const grid = new Map();
 const gk = (cx, cz) => ((cx + 64) << 8) | (cz + 64);
 function addCircle(x, z, r) { const k = gk(Math.floor(x / 8), Math.floor(z / 8)); let a = grid.get(k); if (!a) { a = []; grid.set(k, a); } a.push({ x, z, r }); }
 
-const outerBiome = (x, z) => (Math.abs(x) > Math.abs(z) ? (x > 0 ? 'ember' : 'gloam') : (z > 0 ? 'tide' : 'storm'));
-export const biomeAt = (x, z) => (Math.hypot(x, z) < 124 ? 'meadow' : outerBiome(x, z));
-
-function rawH(x, z) {
-  const r = Math.hypot(x, z), ax = Math.abs(x), az = Math.abs(z);
-  const n1 = fbm(x * 0.011 + 7.3, z * 0.011 + 2.1, 4), n2 = fbm(x * 0.045 + 1.7, z * 0.045 + 9.2, 3);
-  const hm = Math.max(0.9, 2.4 + (n1 - 0.5) * 9 + (n2 - 0.5) * 1.6);
-  const b = outerBiome(x, z); let ho;
-  if (b === 'ember') ho = Math.max(1, 5 + (n1 - 0.5) * 22 + Math.abs(n2 - 0.5) * 9);
-  else if (b === 'tide') ho = Math.max(-0.9, (n1 - 0.5) * 15 + (n2 - 0.5) * 2 + 0.2);
-  else if (b === 'storm') ho = Math.max(1, 12 + (n1 - 0.5) * 20 + (n2 - 0.5) * 3);
-  else ho = Math.max(1, 3.5 + (n1 - 0.5) * 14 + (n2 - 0.5) * 4);
-  let h = lerp(hm, ho, smooth(112, 138, r));
-  h = lerp(2.4, h, smooth(26, 60, r));
-  const pass = ax > az ? smooth(11, 24, az) : smooth(11, 24, ax);
-  const jag = 0.74 + 0.62 * noise(x * 0.035 + 11, z * 0.035 + 4);
-  h += Math.exp(-(((r - 126) / 13) ** 2)) * 40 * pass * jag;
-  const dd = Math.abs(ax - az) * 0.7071;
-  h += Math.exp(-((dd / 11) ** 2)) * 36 * smooth(112, 134, r) * jag;
-  h += smooth(286, 316, Math.max(ax, az)) * 55;
-  return h;
-}
-
+const ROAD_COL = { meadow: 0xb89a6a, ember: 0x5c4038, tide: 0xd8cfae, storm: 0x9298a2, gloam: 0x4d4266 };
 const cA = new THREE.Color(), cB = new THREE.Color(), cO = new THREE.Color(), cT = new THREE.Color();
 function groundColor(x, z, h, slope, out) {
-  const r = Math.hypot(x, z), w = smooth(112, 138, r), b = outerBiome(x, z), n = noise(x * 0.09 + 3, z * 0.09 + 5), B = BIOME[b], M = BIOME.meadow;
+  const r = Math.hypot(x, z), { b, w } = regionBlend(x, z), n = noise(x * 0.09 + 3, z * 0.09 + 5), B = BIOME[b], M = BIOME.meadow;
   cA.setHex(M.g1).lerp(cB.setHex(M.g2), n); cO.setHex(B.g1).lerp(cB.setHex(B.g2), n);
   out.copy(cA).lerp(cO, w);
   if (b === 'tide' && w > 0.5) out.lerp(cT.setHex(0xe6dcae), smooth(0.9, 0.05, h) * 0.85);
-  if (b === 'storm' && w > 0.5) out.lerp(cT.setHex(0xeef3f8), smooth(17, 24, h));
-  if (b === 'ember' && w > 0.5) out.lerp(cT.setHex(0xff6a2a), smooth(0.62, 0.72, n) * smooth(4, 1.5, h) * 0.6);
+  if (b === 'storm' && w > 0.5) out.lerp(cT.setHex(0xeef3f8), smooth(30, 40, h));
+  if (b === 'ember' && w > 0.5) out.lerp(cT.setHex(0xff6a2a), smooth(0.62, 0.72, n) * smooth(6, 3.5, h) * 0.6);
   out.lerp(cT.setHex(w > 0.5 ? B.rock : M.rock), smooth(0.7, 1.15, slope));
-  out.lerp(cT.setHex(w > 0.5 && b === 'ember' ? 0x6a4a40 : w > 0.5 && b === 'gloam' ? 0x7a68b0 : 0xf4f7fb), smooth(27, 40, h) * 0.92);
+  out.lerp(cT.setHex(w > 0.5 && b === 'ember' ? 0x6a4a40 : w > 0.5 && b === 'gloam' ? 0x7a68b0 : 0xf4f7fb), smooth(46, 62, h) * 0.92);
+  const rd = roadAt(x, z); if (rd > 0.03) out.lerp(cT.setHex(ROAD_COL[w > 0.5 ? b : 'meadow']), rd * 0.72);
   out.lerp(cT.setHex(0xb89a6a), smooth(26, 10, r) * 0.75);
 }
 
@@ -122,24 +147,80 @@ const lit = (color) => new THREE.MeshLambertMaterial({ color, flatShading: true 
 const glow = (color, op = 1) => new THREE.MeshBasicMaterial({ color, transparent: op < 1, opacity: op });
 function mesh(geo, mat, sx, sy, sz, x, y, z, parent, shadow = true) { const m = new THREE.Mesh(geo, mat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); m.castShadow = shadow; parent.add(m); return m; }
 
-export const world = {
-  kind: 'overworld', slope: true, group: new THREE.Group(), interactables: [], zones: [], veils: [], pois: [], flats: [], spinners: [], npcs: [], shards: [], propMeshes: [], canopy: [], way: {}, mapCanvas: null, zoneT: 0, veilMsgT: 0,
+// Echo Shards: ids are fixed per region (meadow s0 to s3, then three for each region in this order),
+// so a save's found shards stay found whichever region they are in
+const SHARD_PLAN = [['meadow', 4], ['ember', 3], ['tide', 3], ['storm', 3], ['gloam', 3]];
+const SHARD_REGION = SHARD_PLAN.flatMap(([b, n]) => Array(n).fill(b));
+// how many Echo Shard memories have been found in each region (they unlock in story order)
+export function memoriesFound() { const s = G.save, n = {}; if (s) for (const id in s.shards) { const b = SHARD_REGION[+id.slice(1)]; if (b) n[b] = (n[b] || 0) + 1; } return n; }
 
-  heightAt(x, z) {
-    const fx_ = (x + HALF) / CELL, fz = (z + HALF) / CELL;
-    let i = Math.floor(fx_), j = Math.floor(fz); i = i < 0 ? 0 : i > N - 1 ? N - 1 : i; j = j < 0 ? 0 : j > N - 1 ? N - 1 : j;
-    const u = clamp(fx_ - i, 0, 1), v = clamp(fz - j, 0, 1), o = j * NV + i;
-    const h00 = H[o], h10 = H[o + 1], h01 = H[o + NV], h11 = H[o + NV + 1];
-    return u + v <= 1 ? h00 + (h10 - h00) * u + (h01 - h00) * v : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
-  },
-  gradAt(x, z) { return { x: (this.heightAt(x + 0.6, z) - this.heightAt(x - 0.6, z)) / 1.2, z: (this.heightAt(x, z + 0.6) - this.heightAt(x, z - 0.6)) / 1.2 }; },
-  biomeAt,
-  env(pos) {
-    const r = Math.hypot(pos.x, pos.z), w = smooth(112, 138, r); return { a: BIOME.meadow, b: BIOME[outerBiome(pos.x, pos.z)], w, fogNear: 45, fogFar: 235, hush: this.hushAt(pos.x, pos.z) };
-  },
-  camBlocked(p) { return p.y < this.heightAt(p.x, p.z) + 0.5; },
+// walking this far into a pass loads the other side (the gap between the two lines stops flickering)
+const EXITS = {
+  meadow: [{ to: 'ember', at: (x, z) => x > 150 && Math.abs(z) < 30 }, { to: 'gloam', at: (x, z) => x < -150 && Math.abs(z) < 30 },
+    { to: 'tide', at: (x, z) => z > 150 && Math.abs(x) < 30 }, { to: 'storm', at: (x, z) => z < -150 && Math.abs(x) < 30 }],
+  ember: [{ to: 'meadow', at: (x, z) => x < 134 && Math.abs(z) < 30 }], gloam: [{ to: 'meadow', at: (x, z) => x > -134 && Math.abs(z) < 30 }],
+  tide: [{ to: 'meadow', at: (x, z) => z < 134 && Math.abs(x) < 30 }], storm: [{ to: 'meadow', at: (x, z) => z > -134 && Math.abs(x) < 30 }],
+};
+
+// ---------------------------------------------------------------- the whole-valley map (pause menu, minimap)
+export const MAP = { canvas: null, pois: [] };
+export function buildMap() {
+  const mc = document.createElement('canvas'); mc.width = mc.height = NV; const mctx = mc.getContext('2d'), img = mctx.createImageData(NV, NV), H = T.H, c = new THREE.Color();
+  for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) {
+    const o = j * NV + i, x = -HALF + i * CELL, z = -HALF + j * CELL, h = H[o];
+    const hx = (H[j * NV + Math.min(NV - 1, i + 1)] - H[j * NV + Math.max(0, i - 1)]) / (2 * CELL), hz = (H[Math.min(NV - 1, j + 1) * NV + i] - H[Math.max(0, j - 1) * NV + i]) / (2 * CELL);
+    groundColor(x, z, h, Math.hypot(hx, hz), c); if (h < 0) c.setHex(0x3a9ad8);
+    const sh = clamp(1 - (hx + hz) * 0.35, 0.55, 1.35), hex = c.getHex();
+    img.data[o * 4] = Math.min(255, ((hex >> 16) & 255) * sh); img.data[o * 4 + 1] = Math.min(255, ((hex >> 8) & 255) * sh); img.data[o * 4 + 2] = Math.min(255, (hex & 255) * sh); img.data[o * 4 + 3] = 255;
+  }
+  mctx.putImageData(img, 0, 0); MAP.canvas = mc;
+  MAP.pois = [{ type: 'village', x: 0, z: 0, name: 'Lanternrest' }, ...WAYSTONES.map((w) => ({ type: 'way', id: w.id, x: w.x, z: w.z, name: w.name })),
+    ...Object.values(SHRINES).map((s) => ({ type: 'shrine', id: s.id, x: s.x, z: s.z, name: s.name, el: s.el })), ...KZONES.map((k) => ({ type: 'grove', x: k.x, z: k.z, name: 'Kith grove' })),
+    { type: 'grove', x: SPRINGS.x, z: SPRINGS.z, name: 'Hot springs' }, ...RIFTS.map((r) => ({ type: 'rift', id: r.id, x: r.x, z: r.z, name: 'Hush Rift' }))];
+}
+
+// ---------------------------------------------------------------- pieces set out in Blender
+// tools/world/blender.py writes assets/world/placed.json (where each piece stands) and the pieces
+// themselves as assets/models/kit/<name>.glb. Without that file, nothing is placed.
+const PLACED = { kit: {}, items: [] };
+export async function loadPlaced() {
+  let j = null;
+  try { const r = await fetch('assets/world/placed.json'); if (r.ok) j = await r.json(); } catch (e) { /* none yet */ }
+  if (!j || !j.placed || !j.placed.length) return;
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js'), loader = new GLTFLoader();
+  await Promise.all([...new Set(j.placed.map((p) => p.kit))].map(async (k) => {
+    const info = j.kit && j.kit[k]; if (!info) return;
+    try {
+      const scene = (await loader.loadAsync('assets/' + info.file)).scene;
+      scene.traverse((o) => {   // drawn in the game's own matte style; glowing parts stay lit at night
+        if (!o.isMesh) return; const m = o.material, glows = m.emissive && m.emissive.getHex() !== 0;
+        o.material = glows ? new THREE.MeshBasicMaterial({ color: m.color, map: m.map }) : new THREE.MeshLambertMaterial({ color: m.color, map: m.map, flatShading: true });
+        o.castShadow = true; o.receiveShadow = true;
+      });
+      PLACED.kit[k] = { scene, solid: info.solid !== 0, box: new THREE.Box3().setFromObject(scene) };
+    } catch (e) { console.warn('Could not load the kit piece ' + k, e); }
+  }));
+  for (const p of j.placed) {
+    const k = PLACED.kit[p.kit]; if (!k) continue; const s = p.s || [1, 1, 1];
+    p.r = Math.hypot(k.box.max.x - k.box.min.x, k.box.max.z - k.box.min.z) / 2 * Math.max(s[0], s[2]); PLACED.items.push(p);
+  }
+}
+
+// ---------------------------------------------------------------- regions
+const built = {};
+export function getRegion(id) { if (!built[id]) { built[id] = new Region(id); built[id].build(); } return built[id]; }
+
+class Region {
+  constructor(id) {
+    Object.assign(this, { id, kind: 'overworld', slope: true, group: new THREE.Group(), interactables: [], zones: [], veils: [], spinners: [], npcs: [], shards: [], propMeshes: [], canopy: [], way: {}, chests: [], spots: [], zoneT: 0, veilMsgT: 0, exitT: 0 });
+  }
+  heightAt(x, z) { return heightAt(x, z); }
+  gradAt(x, z) { return { x: (heightAt(x + 0.6, z) - heightAt(x - 0.6, z)) / 1.2, z: (heightAt(x, z + 0.6) - heightAt(x, z - 0.6)) / 1.2 }; }
+  biomeAt(x, z) { return regionAt(x, z); }
+  env(pos) { const { b, w } = regionBlend(pos.x, pos.z); return { a: BIOME.meadow, b: BIOME[b], w, fogNear: 45, fogFar: 235, hush: this.hushAt(pos.x, pos.z) }; }
+  camBlocked(p) { return p.y < heightAt(p.x, p.z) + 0.5; }
   resolve(pos, r, ent) {
-    pos.x = clamp(pos.x, -311, 311); pos.z = clamp(pos.z, -311, 311);
+    pos.x = clamp(pos.x, -282, 282); pos.z = clamp(pos.z, -282, 282);
     const cx = Math.floor(pos.x / 8), cz = Math.floor(pos.z / 8);
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
       const a = grid.get(gk(cx + i, cz + j)); if (!a) continue;
@@ -152,122 +233,152 @@ export const world = {
         if (ent === G.player) this.veilTouch = v;
       }
     }
-  },
+  }
+  mine(x, z) { return regionAt(x, z) === this.id; }
+  // where you can stand while this region is loaded: its own ground and its passes. Its edges run
+  // along the mountain crests, so you can climb a range to the top but not down the far side.
+  allowed(x, z) { return regionAt(x, z) === this.id || (inPass(x, z) && (this.id === 'meadow' || outerOf(x, z) === this.id)); }
 
   build() {
-    const g = this.group, R = rng(20261115);
-    // ---- flatten spots for points of interest
-    const flat = (x, z, r) => { let h = rawH(x, z); if (outerBiome(x, z) === 'tide' && Math.hypot(x, z) > 124) h = Math.max(h, 0.9); this.flats.push({ x, z, r, h }); };
-    for (const w of WAYSTONES) if (w.id !== 'village') flat(w.x, w.z, 7);
-    for (const id in SHRINES) flat(SHRINES[id].x, SHRINES[id].z, 11);
-    for (const c of CAMPS) flat(c.x, c.z, 13);
-    for (const k of KZONES) flat(k.x, k.z, 12);
-    for (const r of RIFTS) flat(r.x, r.z, 9);
+    const id = this.id, g = this.group, R = rng(20261115 + REGION_NAMES.indexOf(id) * 7919), idx = REGION_NAMES.indexOf(id), H = T.H;
+    // which cells to draw: this region, its passes, and a band beyond (the far side of its ranges)
+    const own = new Uint8Array(NV * NV);
     for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) {
-      const x = -HALF + i * CELL, z = -HALF + j * CELL; let h = rawH(x, z);
-      for (const f of this.flats) { const d = Math.hypot(x - f.x, z - f.z); if (d < f.r * 2.2) h = lerp(f.h, h, smooth(f.r, f.r * 2.2, d)); }
-      H[j * NV + i] = h;
+      const o = j * NV + i, x = -HALF + i * CELL, z = -HALF + j * CELL;
+      own[o] = T.regions[o] === idx || (inPass(x, z) && (id === 'meadow' || outerOf(x, z) === id)) ? 1 : 0;
     }
-    // ---- terrain mesh + map image
-    const pos = new Float32Array(NV * NV * 3), col = new Float32Array(NV * NV * 3), idx = new Uint32Array(N * N * 6), c = new THREE.Color();
-    const mc = document.createElement('canvas'); mc.width = mc.height = NV; const mctx = mc.getContext('2d'), img = mctx.createImageData(NV, NV);
-    for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) {
-      const o = j * NV + i, x = -HALF + i * CELL, z = -HALF + j * CELL, h = H[o];
-      const hx = (H[j * NV + Math.min(N, i + 1)] - H[j * NV + Math.max(0, i - 1)]) / (2 * CELL), hz = (H[Math.min(N, j + 1) * NV + i] - H[Math.max(0, j - 1) * NV + i]) / (2 * CELL);
+    const draw = new Uint8Array(NV * NV), tmp = new Uint8Array(NV * NV), K = Math.round(48 / CELL);   // grow by 48 units (a square): the far flank of every range
+    for (let j = 0; j < NV; j++) { let last = -1e9; for (let i = 0; i < NV; i++) { if (own[j * NV + i]) last = i; tmp[j * NV + i] = i - last <= K ? 1 : 0; } last = 1e9; for (let i = NV - 1; i >= 0; i--) { if (own[j * NV + i]) last = i; if (last - i <= K) tmp[j * NV + i] = 1; } }
+    for (let i = 0; i < NV; i++) { let last = -1e9; for (let j = 0; j < NV; j++) { if (tmp[j * NV + i]) last = j; draw[j * NV + i] = j - last <= K ? 1 : 0; } last = 1e9; for (let j = NV - 1; j >= 0; j--) { if (tmp[j * NV + i]) last = j; if (last - j <= K) draw[j * NV + i] = 1; } }
+    let i0 = NV, i1 = 0, j0 = NV, j1 = 0;
+    for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) if (draw[j * NV + i]) { if (i < i0) i0 = i; if (i > i1) i1 = i; if (j < j0) j0 = j; if (j > j1) j1 = j; }
+    const W = i1 - i0 + 1, D = j1 - j0 + 1; this.box = { x0: -HALF + i0 * CELL, x1: -HALF + i1 * CELL, z0: -HALF + j0 * CELL, z1: -HALF + j1 * CELL };
+    // ---- terrain mesh for the box, drawing only the chosen cells
+    const pos = new Float32Array(W * D * 3), col = new Float32Array(W * D * 3), reg = new Float32Array(W * D * 4), c = new THREE.Color(), slot = { ember: 0, tide: 1, storm: 2, gloam: 3 };
+    this.vEdge = new Float32Array(W * D); this.vLab = new Uint8Array(W * D);
+    for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+      const gi = i0 + i, gj = j0 + j, go = gj * NV + gi, o = j * W + i, x = -HALF + gi * CELL, z = -HALF + gj * CELL, h = H[go];
+      const hx = (H[gj * NV + Math.min(NV - 1, gi + 1)] - H[gj * NV + Math.max(0, gi - 1)]) / (2 * CELL), hz = (H[Math.min(NV - 1, gj + 1) * NV + gi] - H[Math.max(0, gj - 1) * NV + gi]) / (2 * CELL);
       groundColor(x, z, h, Math.hypot(hx, hz), c);
       pos[o * 3] = x; pos[o * 3 + 1] = h; pos[o * 3 + 2] = z; col[o * 3] = c.r; col[o * 3 + 1] = c.g; col[o * 3 + 2] = c.b;
-      if (h < 0) c.setHex(0x3a9ad8);
-      const sh = clamp(1 - (hx + hz) * 0.35, 0.55, 1.35), hex = c.getHex();
-      img.data[o * 4] = Math.min(255, ((hex >> 16) & 255) * sh); img.data[o * 4 + 1] = Math.min(255, ((hex >> 8) & 255) * sh); img.data[o * 4 + 2] = Math.min(255, (hex & 255) * sh); img.data[o * 4 + 3] = 255;
+      const rb = regionBlend(x, z); reg[o * 4 + slot[rb.b]] = rb.w;
+      this.vLab[o] = T.regions[go]; this.vEdge[o] = T.regions[go] === 0 ? meadowEdge(Math.hypot(x, z)) : 1;
     }
-    mctx.putImageData(img, 0, 0); this.mapCanvas = mc;
-    let k = 0; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * NV + i, b = a + NV, d = a + 1, cc = b + 1; idx[k++] = a; idx[k++] = b; idx[k++] = d; idx[k++] = b; idx[k++] = cc; idx[k++] = d; }
-    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); tg.setAttribute('color', new THREE.BufferAttribute(col, 3)); tg.setIndex(new THREE.BufferAttribute(idx, 1)); tg.computeBoundingSphere();
+    const tris = []; for (let j = 0; j < D - 1; j++) for (let i = 0; i < W - 1; i++) {
+      if (!draw[(j0 + j) * NV + i0 + i]) continue; const a = j * W + i, b = a + W, d = a + 1, cc = b + 1; tris.push(a, b, d, b, cc, d);
+    }
+    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); tg.setAttribute('color', new THREE.BufferAttribute(col, 3)); tg.setIndex(tris); tg.computeBoundingSphere();
     const tmat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     if (ART.ground) { // custom ground texture, tinted by the biome colours
-      const uv = new Float32Array(NV * NV * 2), sz = ART.ground.size; for (let o = 0; o < NV * NV; o++) { uv[o * 2] = pos[o * 3] / sz; uv[o * 2 + 1] = pos[o * 3 + 2] / sz; }
+      const uv = new Float32Array(W * D * 2), sz = ART.ground.size; for (let o = 0; o < W * D; o++) { uv[o * 2] = pos[o * 3] / sz; uv[o * 2 + 1] = pos[o * 3 + 2] / sz; }
       tg.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); tmat.map = ART.ground.tex;
-    }
+    } else if (ART.groundTex) groundShader(tg, tmat, reg);
     const terrain = new THREE.Mesh(tg, tmat); terrain.receiveShadow = true; g.add(terrain);
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3aa8e0, transparent: true, opacity: 0.7, emissive: 0x0a3a5a })); water.position.y = 0; g.add(water);
+    const bw = this.box.x1 - this.box.x0, bd = this.box.z1 - this.box.z0;
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(bw, bd).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3aa8e0, transparent: true, opacity: 0.7, emissive: 0x0a3a5a }));
+    water.position.set((this.box.x0 + this.box.x1) / 2, 0, (this.box.z0 + this.box.z1) / 2); g.add(water);
+    this.draw = draw; this.i0 = i0; this.j0 = j0;
+    this.collectSpots();
+    this.buildProps(g, R);
+    this.buildPlaced(g);
+    if (id === 'meadow') this.buildVillage(g);
+    this.buildPois(g, R);
+    if (id === 'ember') this.buildVolcano(g);
+    this.setupHush(tg.attributes.color);
+  }
 
-    // ---- props
-    const dummy = new THREE.Object3D(), tmpC = new THREE.Color();
-    const free = (x, z, pad) => { for (const f of this.flats) if (Math.hypot(x - f.x, z - f.z) < f.r + pad) return false; return true; };
-    const okSpot = (x, z, biome, water) => {
-      const r = Math.hypot(x, z);
-      if (biome === 'meadow') { if (r > 108 || r < 34) return false; }
-      else { if (r < 142 || Math.max(Math.abs(x), Math.abs(z)) > 290 || outerBiome(x, z) !== biome || Math.abs(Math.abs(x) - Math.abs(z)) * 0.7071 < 17) return false; }
-      const h = this.heightAt(x, z); if (!water && h < 0.45) return false; if (water && (h > 0.8 || h < -0.6)) return false;
-      const gr = this.gradAt(x, z); return Math.hypot(gr.x, gr.z) < 0.7;
-    };
-    for (const biome in PROPS) for (const def of PROPS[biome]) {
+  // places in this region that plants and shards keep clear of
+  collectSpots() {
+    const add = (x, z, r) => { if (this.mine(x, z) || inPass(x, z)) this.spots.push({ x, z, r }); };
+    for (const w of WAYSTONES) add(w.x, w.z, 7); for (const id in SHRINES) add(SHRINES[id].x, SHRINES[id].z, 11);
+    for (const c of CAMPS) add(c.x, c.z, 13); for (const k of KZONES) add(k.x, k.z, 12); for (const r of RIFTS) add(r.x, r.z, 9);
+    for (const e of EXTRA_ZONES) add(e.x, e.z, 6); add(SPRINGS.x, SPRINGS.z, 10); if (this.id === 'meadow') add(0, 0, 34);
+    for (const p of PLACED.items) add(p.x, p.z, p.r + 1);
+  }
+  free(x, z, pad) { for (const f of this.spots) if (Math.hypot(x - f.x, z - f.z) < f.r + pad) return false; return true; }
+  okSpot(x, z, water) {
+    if (!this.mine(x, z) || inPass(x, z) || Math.max(Math.abs(x), Math.abs(z)) > 278 || roadAt(x, z) > 0.2) return false;
+    const h = heightAt(x, z); if (!water && h < 0.45) return false; if (water && (h > 0.8 || h < -0.6)) return false;
+    if (this.id === 'ember' && Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < VOLCANO.rim + 3) return false;
+    const gr = this.gradAt(x, z); return Math.hypot(gr.x, gr.z) < 0.7;
+  }
+  buildProps(g, R) {
+    const id = this.id, dummy = new THREE.Object3D(), tmpC = new THREE.Color(), b = this.box;
+    const rx = () => lerp(b.x0, b.x1, R()), rz = () => lerp(b.z0, b.z1, R());
+    for (const def of PROPS[id]) {
       const pts = [];
-      for (let t = 0; t < def.n * 14 && pts.length < def.n; t++) {
-        const x = (R() - 0.5) * 600, z = (R() - 0.5) * 600;
-        if (!okSpot(x, z, biome, def.water) || !free(x, z, def.r > 0 ? 2.5 : 0)) continue;
-        const s = lerp(def.s[0], def.s[1], R()); pts.push({ x, z, h: this.heightAt(x, z), s, rot: R() * 6.28, v: R() });
+      for (let t = 0; t < def.n * 16 && pts.length < def.n; t++) {
+        const x = rx(), z = rz();
+        if (!this.okSpot(x, z, def.water) || !this.free(x, z, def.r > 0 ? 2.5 : 0)) continue;
+        const s = lerp(def.s[0], def.s[1], R()); pts.push({ x, z, h: heightAt(x, z), s, rot: R() * 6.28, v: R() });
         if (def.r > 0) addCircle(x, z, def.r * s);
       }
       for (const part of def.parts) {
         const [geo, color, sc, yo, gl] = part;
-        const im = new THREE.InstancedMesh(PG[geo], gl ? new THREE.MeshBasicMaterial({ color: 0xffffff }) : new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), pts.length);
+        const im = new THREE.InstancedMesh(PG[geo], gl ? new THREE.MeshBasicMaterial({ color: 0xffffff }) : new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), Math.max(1, pts.length));
+        im.count = pts.length;
         pts.forEach((p, i) => {
           dummy.position.set(p.x, p.h + yo * p.s - 0.08, p.z); dummy.rotation.set(0, p.rot, 0); dummy.scale.set(sc[0] * p.s, sc[1] * p.s, sc[2] * p.s); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix);
           tmpC.setHex(def.flower ? FLOWERS[Math.floor(p.v * FLOWERS.length)] : color).multiplyScalar(0.85 + p.v * 0.3); im.setColorAt(i, tmpC);
         });
-        im.castShadow = !gl && def.r > 0; im.receiveShadow = false; im.frustumCulled = false; g.add(im); this.propMeshes.push({ im, biome });
+        im.castShadow = !gl && def.r > 0; im.receiveShadow = false; im.frustumCulled = false; g.add(im); this.propMeshes.push({ im, biome: id });
       }
     }
-    // grass
     const grassMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, side: THREE.DoubleSide });
-    for (const biome in GRASS) {
-      const grass = new THREE.InstancedMesh(PG.blade, grassMat, GRASS[biome]); let gi = 0;
-      let placed = 0;
-      for (let t = 0; t < GRASS[biome] * 12 && placed < GRASS[biome]; t++) {
-        const x = (R() - 0.5) * 600, z = (R() - 0.5) * 600; if (!okSpot(x, z, biome, false)) continue;
-        const s = 0.7 + R() * 0.9; dummy.position.set(x, this.heightAt(x, z) - 0.05, z); dummy.rotation.set((R() - 0.5) * 0.4, R() * 6.28, (R() - 0.5) * 0.4); dummy.scale.set(s, s * (0.8 + R() * 0.8), s); dummy.updateMatrix();
-        grass.setMatrixAt(gi, dummy.matrix); tmpC.setHex(BIOME[biome].grass).multiplyScalar(0.75 + R() * 0.45); grass.setColorAt(gi, tmpC); gi++; placed++;
-      }
-      grass.count = gi; grass.frustumCulled = false; g.add(grass); this.propMeshes.push({ im: grass, biome });
+    const grass = new THREE.InstancedMesh(PG.blade, grassMat, GRASS[id]); let gi = 0;
+    for (let t = 0; t < GRASS[id] * 12 && gi < GRASS[id]; t++) {
+      const x = rx(), z = rz(); if (!this.okSpot(x, z, false)) continue;
+      const s = 0.7 + R() * 0.9; dummy.position.set(x, heightAt(x, z) - 0.05, z); dummy.rotation.set((R() - 0.5) * 0.4, R() * 6.28, (R() - 0.5) * 0.4); dummy.scale.set(s, s * (0.8 + R() * 0.8), s); dummy.updateMatrix();
+      grass.setMatrixAt(gi, dummy.matrix); tmpC.setHex(BIOME[id].grass).multiplyScalar(0.75 + R() * 0.45); grass.setColorAt(gi, tmpC); gi++;
     }
+    grass.count = gi; grass.frustumCulled = false; g.add(grass); this.propMeshes.push({ im: grass, biome: id });
+  }
 
-    this.buildVillage(g); this.buildPois(g, R);
-    this.setupHush(tg.attributes.color);
-    this.refresh();
-  },
+  buildPlaced(g) {
+    const v = new THREE.Vector3();
+    for (const p of PLACED.items) {
+      const di = Math.round((p.x + HALF) / CELL), dj = Math.round((p.z + HALF) / CELL);
+      if (di < 0 || dj < 0 || di >= NV || dj >= NV || !this.draw[dj * NV + di]) continue;
+      const k = PLACED.kit[p.kit], o = k.scene.clone(), s = p.s || [1, 1, 1];
+      o.position.set(p.x, heightAt(p.x, p.z) + (p.lift || 0), p.z); if (p.q) o.quaternion.fromArray(p.q); o.scale.fromArray(s);
+      g.add(o); o.updateMatrixWorld(true);
+      if (!k.solid || !this.allowed(p.x, p.z)) continue;
+      // its footprint, as a row of circles along its longer side
+      const b = k.box, w = (b.max.x - b.min.x) * s[0], d = (b.max.z - b.min.z) * s[2], along = w >= d, len = Math.max(w, d), r = Math.max(0.3, Math.min(w, d) / 2);
+      const n = Math.max(1, Math.ceil((len - 2 * r) / (r * 1.2)) + 1), cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2;
+      for (let i = 0; i < n; i++) {
+        const t = n === 1 ? 0 : (i / (n - 1) - 0.5) * (len - 2 * r);
+        v.set(along ? cx + t / s[0] : cx, 0, along ? cz : cz + t / s[2]).applyMatrix4(o.matrixWorld); addCircle(v.x, v.z, r);
+      }
+    }
+  }
 
-  // remember every colour as built, and how much each terrain vertex and meadow plant belongs to
-  // the meadow's edge or to an outer region, so the Hush can be laid over and lifted cheaply
+  // remember every colour as built, and how much each terrain vertex and meadow plant sits toward the
+  // meadow's edge, so the Hush can be laid over and lifted cheaply
   setupHush(colAttr) {
     this.terrainCol = colAttr; this.baseCol = colAttr.array.slice();
-    const n = NV * NV; this.vM = new Float32Array(n); this.vW = new Float32Array(n); this.vB = new Uint8Array(n);
-    for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) {
-      const o = j * NV + i, x = -HALF + i * CELL, z = -HALF + j * CELL, r = Math.hypot(x, z), w = smooth(112, 138, r);
-      this.vM[o] = meadowEdge(r) * (1 - w); this.vW[o] = w; this.vB[o] = REGIONS.indexOf(outerBiome(x, z));
-    }
     const m = new THREE.Matrix4(), v = new THREE.Vector3();
     for (const pm of this.propMeshes) {
       if (!pm.im.instanceColor) continue;
       pm.base = pm.im.instanceColor.array.slice();
       if (pm.biome === 'meadow') { pm.edge = new Float32Array(pm.im.count); for (let i = 0; i < pm.im.count; i++) { pm.im.getMatrixAt(i, m); v.setFromMatrixPosition(m); pm.edge[i] = meadowEdge(Math.hypot(v.x, v.z)); } }
     }
-  },
+  }
   applyHush() {
-    const h = this.hush, hb = REGIONS.map((b) => h[b]), out = this.terrainCol.array, base = this.baseCol;
-    for (let o = 0, n = this.vM.length; o < n; o++) greyed(out, o * 3, base, h.meadow * this.vM[o] + hb[this.vB[o]] * this.vW[o]);
+    const h = this.hush, hb = REGION_NAMES.map((b) => h[b]), out = this.terrainCol.array, base = this.baseCol;
+    for (let o = 0, n = this.vLab.length; o < n; o++) greyed(out, o * 3, base, hb[this.vLab[o]] * this.vEdge[o]);
     this.terrainCol.needsUpdate = true;
     for (const pm of this.propMeshes) {
       if (!pm.base) continue; const arr = pm.im.instanceColor.array, kb = h[pm.biome] || 0;
       for (let i = 0; i < pm.im.count; i++) greyed(arr, i * 3, pm.base, pm.edge ? kb * pm.edge[i] : kb);
       pm.im.instanceColor.needsUpdate = true;
     }
-  },
+  }
   // how grey the Hush has left this spot (used for the sky, fog and light)
-  hushAt(x, z) { if (!this.hush) return 0; const r = Math.hypot(x, z), w = smooth(112, 138, r); return lerp(this.hush.meadow * meadowEdge(r), this.hush[outerBiome(x, z)], w); },
+  hushAt(x, z) { if (!this.hush) return 0; const reg = regionAt(x, z); return reg === 'meadow' ? this.hush.meadow * meadowEdge(Math.hypot(x, z)) : this.hush[reg]; }
 
   buildVillage(g) {
-    const y0 = this.heightAt(0, 0);
+    const y0 = heightAt(0, 0);
     // Lantern Tree
     const tree = new THREE.Group(); tree.position.set(0, y0, 0); g.add(tree);
     mesh(PG.cyl, lit(0x6b4a2b), 3.2, 10, 3.2, 0, 0, 0, tree);
@@ -279,12 +390,12 @@ export const world = {
     // huts
     const roofs = [0xc0503a, 0x3a8a8a, 0xd0a03a, 0x8a5ab0, 0xc0503a, 0x3a8a8a];
     [20, 78, 150, 208, 262, 322].forEach((deg, i) => {
-      const a = deg * Math.PI / 180, r = 23 + (i % 2) * 3, x = Math.cos(a) * r, z = Math.sin(a) * r, h = this.heightAt(x, z), hut = new THREE.Group(); hut.position.set(x, h - 0.1, z); hut.rotation.y = Math.atan2(-x, -z); g.add(hut);
+      const a = deg * Math.PI / 180, r = 23 + (i % 2) * 3, x = Math.cos(a) * r, z = Math.sin(a) * r, h = heightAt(x, z), hut = new THREE.Group(); hut.position.set(x, h - 0.1, z); hut.rotation.y = Math.atan2(-x, -z); g.add(hut);
       mesh(PG.cyl, lit(0xe0d0a8), 6.6, 3, 6.6, 0, 0, 0, hut); mesh(PG.cone, lit(roofs[i]), 8.4, 3, 8.4, 0, 2.9, 0, hut); mesh(PG.box, lit(0x5a3f28), 1.1, 1.9, 0.3, 0, 0, 2.75, hut, false); mesh(PG.box, glow(0xffe0a0), 0.7, 0.7, 0.2, 1.7, 1.3, 2.4, hut, false);
       addCircle(x, z, 3.3);
     });
     // forge, stall, grove pens, well
-    const at = (x, z) => { const grp = new THREE.Group(); grp.position.set(x, this.heightAt(x, z), z); g.add(grp); return grp; };
+    const at = (x, z) => { const grp = new THREE.Group(); grp.position.set(x, heightAt(x, z), z); g.add(grp); return grp; };
     const forge = at(-18, -7); mesh(PG.box, lit(0x4a4458), 2.2, 1.1, 1.6, 0, 0, 0, forge); mesh(PG.box, glow(0xff7a3c), 1.4, 0.2, 1, 0, 1.1, 0, forge, false); mesh(PG.cyl, lit(0x3a3340), 0.7, 3, 0.7, -0.7, 1.1, 0, forge); addCircle(-18, -7, 1.4);
     const stall = at(16, 11); for (const [x, z] of [[-1.3, -1], [1.3, -1], [-1.3, 1], [1.3, 1]]) mesh(PG.cyl, lit(0x6b4a2b), 0.18, 2.4, 0.18, x, 0, z, stall); mesh(PG.box, lit(0xd0562e), 3.2, 0.2, 2.6, 0, 2.4, 0, stall); mesh(PG.box, lit(0x8a6a3a), 2.8, 1, 0.8, 0, 0, -0.8, stall); addCircle(16, 11, 1.6);
     const pen = at(-9, 19); for (let i = 0; i < 10; i++) { const a = i / 10 * 6.28; mesh(PG.box, lit(0x8a6a3a), 0.16, 0.9, 0.16, Math.cos(a) * 3, 0, Math.sin(a) * 3, pen); const b = mesh(PG.box, lit(0x8a6a3a), 1.9, 0.12, 0.1, Math.cos(a + 0.314) * 2.9, 0.6, Math.sin(a + 0.314) * 2.9, pen, false); b.rotation.y = -(a + 0.314) + Math.PI / 2; }
@@ -293,26 +404,31 @@ export const world = {
     this.interactables.push({ pos: new THREE.Vector3(-16, well.position.y, 12), r: 3.4, label: () => (G.save.relics.cinders ? 'Descend into the Abyss' : 'Examine the well'), use: () => G.game.useWell() });
     // NPCs
     for (const n of NPCS) {
-      const m = makeNpcModel(n.look, n.id); const y = this.heightAt(n.x, n.z); m.root.position.set(n.x, y, n.z); m.root.rotation.y = Math.atan2(-n.x * 0.35, 1); g.add(m.root);
+      const m = makeNpcModel(n.look, n.id); const y = heightAt(n.x, n.z); m.root.position.set(n.x, y, n.z); m.root.rotation.y = Math.atan2(-n.x * 0.35, 1); g.add(m.root);
       this.npcs.push({ id: n.id, m, t: rand(10) }); addCircle(n.x, n.z, 0.6);
       this.interactables.push({ pos: new THREE.Vector3(n.x, y, n.z), r: 2.9, label: 'Talk to ' + n.name, cond: () => !(G.trials && G.trials.hidden === n.id), use: () => G.game.talk(n.id) });
     }
-    this.pois.push({ type: 'village', x: 0, z: 0, name: 'Lanternrest' });
-  },
+    // veils across the passes (the meadow side of each)
+    for (const b in PASS) {
+      const p = PASS[b], y = heightAt(p.x, p.z), isX = p.ax === 'x';
+      const mat = new THREE.MeshBasicMaterial({ color: 0x1a0f30, transparent: true, opacity: 0.82, side: THREE.DoubleSide, depthWrite: false });
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(58, 46), mat); m.position.set(p.x, y + 16, p.z); m.rotation.y = isX ? Math.PI / 2 : 0; g.add(m);
+      this.veils.push({ biome: b, ax: p.ax, cx: p.x, cz: p.z, x0: isX ? p.x - 1.5 : p.x - 28, x1: isX ? p.x + 1.5 : p.x + 28, z0: isX ? p.z - 28 : p.z - 1.5, z1: isX ? p.z + 28 : p.z + 1.5, mesh: m, mat, open: false, y });
+    }
+  }
 
   buildPois(g, R) {
-    // waystones
     for (const w of WAYSTONES) {
-      const y = this.heightAt(w.x, w.z), grp = new THREE.Group(); grp.position.set(w.x, y, w.z); g.add(grp);
+      if (!this.mine(w.x, w.z)) continue;
+      const y = heightAt(w.x, w.z), grp = new THREE.Group(); grp.position.set(w.x, y, w.z); g.add(grp);
       mesh(PG.cyl, lit(0x7b8090), 3, 0.4, 3, 0, -0.05, 0, grp); mesh(PG.box, lit(0x8b90a0), 0.9, 3.4, 0.9, 0, 0.3, 0, grp);
-      const cm = glow(0x556070), crystal = mesh(PG.oct, cm, 0.8, 1.2, 0.8, 0, 4.1, 0, grp, false), rune = mesh(PG.box, cm, 0.94, 0.5, 0.94, 0, 2.2, 0, grp, false);
-      addCircle(w.x, w.z, 0.9); this.way[w.id] = { cm, crystal, grp }; void rune;
+      const cm = glow(0x556070), crystal = mesh(PG.oct, cm, 0.8, 1.2, 0.8, 0, 4.1, 0, grp, false); mesh(PG.box, cm, 0.94, 0.5, 0.94, 0, 2.2, 0, grp, false);
+      addCircle(w.x, w.z, 0.9); this.way[w.id] = { cm, crystal, grp };
       this.interactables.push({ pos: new THREE.Vector3(w.x, y, w.z), r: 3.3, label: () => (G.save.waystones[w.id] ? 'Rest at Waystone' : 'Awaken Waystone'), use: () => G.game.useWaystone(w.id) });
-      this.pois.push({ type: 'way', id: w.id, x: w.x, z: w.z, name: w.name });
     }
-    // shrine gates
     for (const id in SHRINES) {
-      const s = SHRINES[id], y = this.heightAt(s.x, s.z), grp = new THREE.Group(), col = EL[s.el].color; grp.position.set(s.x, y, s.z); grp.rotation.y = Math.atan2(-s.x, -s.z); g.add(grp);
+      const s = SHRINES[id]; if (!this.mine(s.x, s.z)) continue;
+      const y = heightAt(s.x, s.z), grp = new THREE.Group(), col = EL[s.el].color; grp.position.set(s.x, y, s.z); grp.rotation.y = Math.atan2(-s.x, -s.z); g.add(grp);
       for (const sx of [-1, 1]) { mesh(PG.box, lit(0x6f7484), 1.3, 7, 1.3, sx * 3, 0, 0, grp); mesh(PG.oct, glow(col), 0.8, 1.2, 0.8, sx * 3, 7.1, 0, grp, false); }
       mesh(PG.box, lit(0x6f7484), 8.6, 1.1, 1.6, 0, 6.2, 0, grp); mesh(PG.cyl, lit(0x7b8090), 9, 0.3, 9, 0, -0.1, 0, grp);
       const pm = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -320,100 +436,107 @@ export const world = {
       const a = grp.rotation.y; for (const sx of [-1, 1]) addCircle(s.x + Math.cos(a) * sx * 3, s.z - Math.sin(a) * sx * 3, 0.9);
       this.spinners.push({ kind: 'portal', pm, x: s.x, y: y + 3, z: s.z, col });
       this.interactables.push({ pos: new THREE.Vector3(s.x, y, s.z), r: 4.2, label: 'Enter the ' + s.name.replace(/^The /, ''), use: () => G.game.enterShrine(id) });
-      this.pois.push({ type: 'shrine', id, x: s.x, z: s.z, name: s.name, el: s.el });
-    }
-    // veils across the passes
-    for (const b in PASS) {
-      const p = PASS[b], y = this.heightAt(p.x, p.z), isX = p.ax === 'x';
-      const mat = new THREE.MeshBasicMaterial({ color: 0x1a0f30, transparent: true, opacity: 0.82, side: THREE.DoubleSide, depthWrite: false });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(58, 46), mat); m.position.set(p.x, y + 16, p.z); m.rotation.y = isX ? Math.PI / 2 : 0; g.add(m);
-      this.veils.push({ biome: b, ax: p.ax, cx: p.x, cz: p.z, x0: isX ? p.x - 1.5 : p.x - 28, x1: isX ? p.x + 1.5 : p.x + 28, z0: isX ? p.z - 28 : p.z - 1.5, z1: isX ? p.z + 28 : p.z + 1.5, mesh: m, mat, open: false, y });
     }
     // enemy camps (with a totem and a chest) and Kith groves
     CAMPS.forEach((c, i) => {
-      const biome = biomeAt(c.x, c.z), col = EL[BIOME[biome].el].color, y = this.heightAt(c.x, c.z), grp = new THREE.Group(); grp.position.set(c.x, y, c.z); g.add(grp);
+      if (!this.mine(c.x, c.z)) return;
+      const biome = this.id, col = EL[BIOME[biome].el].color, y = heightAt(c.x, c.z), grp = new THREE.Group(); grp.position.set(c.x, y, c.z); g.add(grp);
       mesh(PG.cone, lit(0x231f2e), 1.6, 5, 1.6, 0, 0, 0, grp); mesh(PG.oct, glow(col), 0.7, 1, 0.7, 0, 5, 0, grp, false);
       for (let k = 0; k < 5; k++) { const a = k / 5 * 6.28 + 0.4; const sp = mesh(PG.cone, lit(0x231f2e), 0.7, 2 + (k % 2), 0.7, Math.cos(a) * 10, 0, Math.sin(a) * 10, grp); sp.rotation.z = Math.cos(a) * 0.25; sp.rotation.x = -Math.sin(a) * 0.25; }
       addCircle(c.x, c.z, 0.9);
       this.zones.push({ kind: 'camp', x: c.x, z: c.z, r: 8, lvl: c.lvl, list: c.list, biome, spawned: false, alive: [], respawnAt: 0 });
-      const id = 'c' + i, cx = c.x + 6.5, cz = c.z + 4.5, cy = this.heightAt(cx, cz), ch = new THREE.Group(); ch.position.set(cx, cy, cz); ch.rotation.y = R() * 6.28; g.add(ch);
+      const id = 'c' + i, cx = c.x + 6.5, cz = c.z + 4.5, cy = heightAt(cx, cz), ch = new THREE.Group(); ch.position.set(cx, cy, cz); ch.rotation.y = R() * 6.28; g.add(ch);
       mesh(PG.box, lit(0x7a4a2a), 1.3, 0.7, 0.9, 0, 0, 0, ch); mesh(PG.box, lit(0xffd24a), 1.36, 0.12, 0.96, 0, 0.3, 0, ch, false);
       const lid = new THREE.Group(); lid.position.set(0, 0.7, -0.45); ch.add(lid); mesh(PG.box, lit(0x8a5a34), 1.3, 0.3, 0.9, 0, 0, 0.45, lid);
       addCircle(cx, cz, 0.8);
       const chest = { id, lid, opened: false, reward: { motes: 40 + c.lvl * 12, threads: i % 3 === 0 ? 3 : 0, sigil: i % 5 === 2 ? 1 : 0 } };
-      this.chests = this.chests || []; this.chests.push(chest);
+      this.chests.push(chest);
       this.interactables.push({ pos: new THREE.Vector3(cx, cy, cz), r: 2.6, label: 'Open chest', cond: () => !G.save.chests[id], use: () => { G.game.openChest(chest); } });
     });
     for (const kz of KZONES) {
-      const biome = biomeAt(kz.x, kz.z), y = this.heightAt(kz.x, kz.z), grp = new THREE.Group(); grp.position.set(kz.x, y, kz.z); g.add(grp);
+      if (!this.mine(kz.x, kz.z)) continue;
+      const y = heightAt(kz.x, kz.z), grp = new THREE.Group(); grp.position.set(kz.x, y, kz.z); g.add(grp);
       for (let k = 0; k < 7; k++) { const a = k / 7 * 6.28; mesh(PG.rock, lit(0xcfd6d8), 0.9, 1.4 + (k % 3) * 0.5, 0.9, Math.cos(a) * 11, 0, Math.sin(a) * 11, grp); }
-      this.zones.push({ kind: 'kith', x: kz.x, z: kz.z, r: 9, biome, spawned: false, alive: [], respawnAt: 0 });
-      this.pois.push({ type: 'grove', x: kz.x, z: kz.z, name: 'Kith grove' });
+      this.zones.push({ kind: 'kith', x: kz.x, z: kz.z, r: 9, biome: this.id, spawned: false, alive: [], respawnAt: 0 });
     }
-    // story spots (EXTRA_ZONES in data.js): no flats and no random numbers, so nothing else moves
-    for (const ez of EXTRA_ZONES) this.zones.push({ ...ez, biome: biomeAt(ez.x, ez.z), spawned: false, alive: [], respawnAt: 0 });
-    { // the Emberridge hot springs: three steaming pools in a ring of pale rocks
-      const y = this.heightAt(SPRINGS.x, SPRINGS.z), grp = new THREE.Group(); grp.position.set(SPRINGS.x, y, SPRINGS.z); g.add(grp);
+    for (const ez of EXTRA_ZONES) if (this.mine(ez.x, ez.z)) this.zones.push({ ...ez, biome: this.id, spawned: false, alive: [], respawnAt: 0 });
+    if (this.mine(SPRINGS.x, SPRINGS.z)) { // the Emberridge hot springs: three steaming pools in a ring of pale rocks
+      const y = heightAt(SPRINGS.x, SPRINGS.z), grp = new THREE.Group(); grp.position.set(SPRINGS.x, y, SPRINGS.z); g.add(grp);
       const pool = new THREE.CylinderGeometry(1, 1, 0.2, 18), water = new THREE.MeshLambertMaterial({ color: 0x5fd0d8, emissive: 0x1f6a70, transparent: true, opacity: 0.88 }), rim = lit(0x8a7a6a);
       const pools = [[0, 0, 3.2], [4.8, 2.6, 1.8], [-3.8, 3.6, 1.5]];
       for (const [px, pz, pr] of pools) { const w = new THREE.Mesh(pool, water); w.scale.set(pr, 1, pr); w.position.set(px, 0.12, pz); grp.add(w); const e = new THREE.Mesh(pool, rim); e.scale.set(pr + 0.35, 1, pr + 0.35); e.position.set(px, 0.04, pz); grp.add(e); }
       for (let k = 0; k < 7; k++) { const a = k / 7 * 6.28 + 0.3; mesh(PG.rock, lit(0xd8cfc0), 0.9, 1.1 + (k % 3) * 0.4, 0.9, Math.cos(a) * 9, 0, Math.sin(a) * 9, grp); }
       this.steam = pools.map(([px, pz, pr]) => ({ x: SPRINGS.x + px, y: y + 0.3, z: SPRINGS.z + pz, r: pr }));
-      // clear the plants that grew where the pools now are (only hides them, so nothing else moves)
-      const mt = new THREE.Matrix4(), at = new THREE.Vector3(), gone = new THREE.Matrix4().makeScale(0, 0, 0);
-      for (const pm of this.propMeshes) {
-        if (pm.biome !== 'ember') continue; let hit = false;
-        for (let i = 0; i < pm.im.count; i++) { pm.im.getMatrixAt(i, mt); at.setFromMatrixPosition(mt); if (Math.hypot(at.x - SPRINGS.x, at.z - SPRINGS.z) < 7) { pm.im.setMatrixAt(i, gone); hit = true; } }
-        if (hit) pm.im.instanceMatrix.needsUpdate = true;
-      }
-      this.pois.push({ type: 'grove', x: SPRINGS.x, z: SPRINGS.z, name: 'Hot springs' });
     }
-    // Hush rifts
     RIFTS.forEach((r, i) => {
-      const y = this.heightAt(r.x, r.z), m = mesh(PG.oct, glow(0x7a3ad8, 0.85), 1.5, 4.4, 1.5, r.x, y + 0.8, r.z, g, false);
+      if (!this.mine(r.x, r.z)) return;
+      const y = heightAt(r.x, r.z), m = mesh(PG.oct, glow(0x7a3ad8, 0.85), 1.5, 4.4, 1.5, r.x, y + 0.8, r.z, g, false);
       mesh(PG.cyl, lit(0x231f2e), 5, 0.3, 5, r.x, y - 0.1, r.z, g);
       this.spinners.push({ kind: 'rift', mesh: m, x: r.x, y: y + 3, z: r.z });
       this.interactables.push({ pos: new THREE.Vector3(r.x, y, r.z), r: 4, label: () => (G.save.rifts[r.id] ? 'Re-enter Hush Rift' : 'Enter Hush Rift'), use: () => G.game.enterRift(r.id, i) });
-      this.pois.push({ type: 'rift', id: r.id, x: r.x, z: r.z, name: 'Hush Rift' });
     });
-    // Echo shards: four in the meadow, three in each outer biome
-    const beamGeo = new THREE.CylinderGeometry(0.1, 0.1, 30, 5).translate(0, 15, 0); let n = 0;
-    for (const [biome, count] of [['meadow', 4], ['ember', 3], ['tide', 3], ['storm', 3], ['gloam', 3]]) {
-      let placed = 0;
-      for (let t = 0; t < 4000 && placed < count; t++) {
-        const x = (R() - 0.5) * 590, z = (R() - 0.5) * 590, r = Math.hypot(x, z);
-        if (biome === 'meadow' ? (r > 104 || r < 45) : (r < 150 || outerBiome(x, z) !== biome || Math.max(Math.abs(x), Math.abs(z)) > 284 || Math.abs(Math.abs(x) - Math.abs(z)) * 0.7071 < 20)) continue;
-        const h = this.heightAt(x, z), gr = this.gradAt(x, z); if (h < 0.6 || Math.hypot(gr.x, gr.z) > 0.6) continue;
-        let far = true; for (const s of this.shards) if (Math.hypot(s.x - x, s.z - z) < 60) far = false; for (const f of this.flats) if (Math.hypot(f.x - x, f.z - z) < f.r + 14) far = false; if (!far) continue;
-        const id = 's' + n++, grp = new THREE.Group(); grp.position.set(x, h, z); g.add(grp);
+    // Echo Shards: this region's share, on ground you can reach (the last one may need a jump)
+    const beamGeo = new THREE.CylinderGeometry(0.1, 0.1, 30, 5).translate(0, 15, 0), b = this.box;
+    let start = 0; for (const [rb, n] of SHARD_PLAN) { if (rb === this.id) break; start += n; }
+    const count = SHARD_PLAN.find(([rb]) => rb === this.id)[1];
+    for (let k = 0; k < count; k++) {
+      const wantJump = k === count - 1;
+      for (let t = 0; t < 6000; t++) {
+        const x = lerp(b.x0, b.x1, R()), z = lerp(b.z0, b.z1, R());
+        if (!this.mine(x, z) || inPass(x, z) || Math.max(Math.abs(x), Math.abs(z)) > 270 || roadAt(x, z) > 0.5) continue;
+        if (this.id === 'meadow' && Math.hypot(x, z) < 45) continue;
+        const reach = reachAt(x, z); if (reach === 0 || (wantJump && t < 3000 ? reach < 2 : reach !== 1 && !wantJump)) continue;
+        const h = heightAt(x, z), gr = this.gradAt(x, z); if (h < 0.6 || Math.hypot(gr.x, gr.z) > 0.6) continue;
+        if (this.shards.some((s) => Math.hypot(s.x - x, s.z - z) < 45) || !this.free(x, z, 14)) continue;
+        const grp = new THREE.Group(); grp.position.set(x, h, z); g.add(grp);
         const gem = mesh(PG.oct, glow(0xd8f6ff), 0.7, 1.1, 0.7, 0, 0.9, 0, grp, false);
-        const bm = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: 0x9adfff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false })); grp.add(bm);
-        this.shards.push({ id, biome, x, z, y: h, grp, gem, taken: false }); placed++;
+        grp.add(new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: 0x9adfff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false })));
+        this.shards.push({ id: 's' + (start + k), biome: this.id, x, z, y: h, grp, gem, taken: false }); break;
       }
     }
-  },
+  }
 
-  // how many Echo Shard memories have been found in each region (they unlock in story order)
-  memoriesFound() { const s = G.save, n = {}; for (const sh of this.shards) if (s && s.shards[sh.id]) n[sh.biome] = (n[sh.biome] || 0) + 1; return n; },
+  // Emberridge's crater: a glowing lava lake round the shrine's island (touching it burns, and throws
+  // you back to the last safe ground)
+  buildVolcano(g) {
+    const V = VOLCANO, mat = new THREE.MeshBasicMaterial({ color: 0xff6a1a });
+    const lava = new THREE.Mesh(new THREE.CircleGeometry(V.rim + 1, 48).rotateX(-Math.PI / 2), mat); lava.position.set(V.x, V.lava, V.z); g.add(lava);
+    const light = new THREE.PointLight(0xff7a2a, 90, 70, 1.4); light.position.set(V.x, V.lava + 10, V.z); g.add(light);
+    // until you have stood somewhere safe, the lava throws you to the top of the causeway on the rim
+    let rim = null; for (let a = 0; a < 6.28 && !rim; a += 0.02) { const x = V.x + Math.cos(a) * (V.rim + 3), z = V.z + Math.sin(a) * (V.rim + 3); if (roadAt(x, z) > 0.6) rim = new THREE.Vector3(x, heightAt(x, z), z); }
+    this.lava = { mat, light, rim: rim || new THREE.Vector3(V.x, V.islandH, V.z), safe: null, cd: 0 };
+  }
+  updateVolcano(dt, t) {
+    const L = this.lava, V = VOLCANO, p = G.player; if (!L) return;
+    L.mat.color.setRGB(1, 0.38 + 0.08 * Math.sin(t * 1.7), 0.08); L.light.intensity = 80 + 20 * Math.sin(t * 2.3);
+    if (Math.random() < dt * 18) { const a = rand(6.28), r = rand(V.island + 1, V.rim); fx.spawn(V.x + Math.cos(a) * r, V.lava + 0.2, V.z + Math.sin(a) * r, 0, rand(1, 3), 0, rand() < 0.5 ? 0xffb03a : 0xff5a1a, 0.5, 1.2, 0); }
+    L.cd -= dt;
+    const inCrater = Math.hypot(p.pos.x - V.x, p.pos.z - V.z) < V.rim + 1;
+    if (inCrater && p.pos.y < V.lava + 0.25 && !p.dead) {
+      if (L.cd <= 0) { L.cd = 1; p.takeHit(p.maxHp * 0.2, { unblockable: true, el: 'ember', noStagger: true }); G.ui.toast('The lava throws you back!'); audio.sfx('fire'); }
+      if (!p.dead) { p.pos.copy(L.safe || L.rim); p.vel.set(0, 0, 0); }
+    } else if (p.grounded && !p.dead) { (L.safe ||= p.pos.clone()).copy(p.pos); }
+  }
 
-  // sync world objects with the save (called on load and after progress)
+  // sync this region with the save (called on entering it and after progress)
   refresh() {
     const s = G.save; if (!s) return;
     for (const v of this.veils) { v.open = !!s.shrines[VEIL_REQ[v.biome]]; v.mesh.visible = !v.open; }
     for (const id in this.way) this.way[id].cm.color.set(s.waystones[id] ? 0x6ff0ff : 0x556070);
     for (const sh of this.shards) { sh.taken = !!s.shards[sh.id]; sh.grp.visible = !sh.taken; }
     for (const c of this.chests) { c.opened = !!s.chests[c.id]; c.lid.rotation.x = c.opened ? -1.9 : 0; }
-    // the Lantern Tree relights as the story goes: one lantern left at the start, all nine at the end
-    const lit = [1, 3, 5, 6, 8, 9][Math.min(5, Object.keys(s.shrines).length)], order = [0, 5, 3, 7, 1, 6, 4, 8, 2];
-    this.lanterns.forEach((m, i) => { m.material = order[i] < lit ? this.lanternOn : this.lanternOff; });
-    this.treeLight.intensity = 15 + 45 * lit / 9;
-    // the Hush lifts from woken regions (snapped on load, animated in update after that), and the music grows
-    const target = {}; for (const b of REGIONS) target[b] = s.shrines[HUSH_SHRINE[b]] ? 0 : HUSH_MAX[b];
+    if (this.lanterns) { // the Lantern Tree relights as the story goes: one lantern left at the start, all nine at the end
+      const lit = [1, 3, 5, 6, 8, 9][Math.min(5, Object.keys(s.shrines).length)], order = [0, 5, 3, 7, 1, 6, 4, 8, 2];
+      this.lanterns.forEach((m, i) => { m.material = order[i] < lit ? this.lanternOn : this.lanternOff; });
+      this.treeLight.intensity = 15 + 45 * lit / 9;
+    }
+    // the Hush lifts from woken regions (snapped when entering, animated after that), and the music grows
+    const target = {}; for (const b of REGION_NAMES) target[b] = s.shrines[HUSH_SHRINE[b]] ? 0 : HUSH_MAX[b];
     if (!this.hush || this.hushSave !== s) { this.hush = target; this.hushSave = s; this.hushTarget = null; this.applyHush(); } else this.hushTarget = target;
     audio.setSong(Object.keys(s.shrines).length);
-  },
-  resetZones() { for (const z of this.zones) { z.spawned = false; z.alive = []; } },
-  respawnAll() { for (const z of this.zones) { for (const e of z.alive) if (!e.dead) e.remove(); z.alive = []; z.spawned = false; z.respawnAt = 0; } },
+  }
+  resetZones() { for (const z of this.zones) { z.spawned = false; z.alive = []; } }
+  respawnAll() { for (const z of this.zones) { for (const e of z.alive) if (!e.dead) e.remove(); z.alive = []; z.spawned = false; z.respawnAt = 0; } }
 
   spawnZone(z) {
     z.spawned = true; z.alive = []; const B = BIOME[z.biome];
@@ -423,15 +546,13 @@ export const world = {
       const n = z.n || 2 + (Math.random() < 0.45 ? 1 : 0);
       for (let i = 0; i < n; i++) { const a = rand(6.28), d = rand(Math.min(1, z.r), z.r), sp = weighted(z.table || KTABLE[z.biome]); const lvl = z.lvl || B.lvl[0] + Math.floor(Math.random() * (B.lvl[1] - B.lvl[0] + 1)); z.alive.push(spawnWild(sp, z.x + Math.cos(a) * d, z.z + Math.sin(a) * d, lvl)); }
     }
-  },
+  }
 
   update(dt, t) {
     const p = G.player.pos, s = G.save;
     this.zoneT -= dt;
     if (this.zoneT <= 0) {
       this.zoneT = 0.4;
-      const pr = Math.hypot(p.x, p.z), pb = outerBiome(p.x, p.z);
-      for (const pm of this.propMeshes) { const ps = PASS[pm.biome]; pm.im.visible = pm.biome === 'meadow' ? pr < 235 : ((pr > 110 && pb === pm.biome) || Math.hypot(p.x - ps.x, p.z - ps.z) < 125); }
       for (const z of this.zones) {
         const d = Math.hypot(p.x - z.x, p.z - z.z);
         if (!z.spawned) { if (d < 72 && s.playtime >= z.respawnAt && (!z.cond || ZONE_COND[z.cond](s))) this.spawnZone(z); }
@@ -445,7 +566,7 @@ export const world = {
     }
     if (this.hushTarget) {   // colour flooding back into a woken region
       let moving = false, moved = 0;
-      for (const b of REGIONS) { const d = this.hushTarget[b] - this.hush[b]; if (Math.abs(d) > 0.0005) { const st = Math.sign(d) * Math.min(Math.abs(d), dt * 0.2); this.hush[b] += st; moved += Math.abs(st); moving = true; } }
+      for (const b of REGION_NAMES) { const d = this.hushTarget[b] - this.hush[b]; if (Math.abs(d) > 0.0005) { const st = Math.sign(d) * Math.min(Math.abs(d), dt * 0.2); this.hush[b] += st; moved += Math.abs(st); moving = true; } }
       this.hushMoved = (this.hushMoved || 0) + moved;
       if (!moving || this.hushMoved > 0.02) { this.applyHush(); this.hushMoved = 0; }
       if (!moving) this.hushTarget = null;
@@ -454,6 +575,7 @@ export const world = {
       const v = this.steam[Math.floor(Math.random() * this.steam.length)], a = rand(6.28), d = rand(0, v.r * 0.8);
       fx.spawn(v.x + Math.cos(a) * d, v.y, v.z + Math.sin(a) * d, rand(-0.2, 0.2), rand(0.9, 1.6), rand(-0.2, 0.2), 0xf2f6f8, 0.9, 1.8, 0);
     }
+    if (this.lava) this.updateVolcano(dt, t);
     for (const sp of this.spinners) {
       if (sp.kind === 'portal') { sp.pm.opacity = 0.45 + 0.25 * Math.sin(t * 2.5); if (Math.hypot(p.x - sp.x, p.z - sp.z) < 60 && Math.random() < dt * 14) fx.spawn(sp.x + rand(-2, 2), sp.y + rand(-2.5, 2.5), sp.z + rand(-2, 2), 0, rand(0.5, 2), 0, sp.col, 0.4, 0.8, 0); }
       else { sp.mesh.rotation.y = t * 0.8; sp.mesh.scale.y = 4.4 + Math.sin(t * 2) * 0.4; if (Math.hypot(p.x - sp.x, p.z - sp.z) < 60 && Math.random() < dt * 14) fx.spawn(sp.x + rand(-2, 2), sp.y + rand(-2, 3), sp.z + rand(-2, 2), rand(-1, 1), rand(-1, 1), rand(-1, 1), 0xb06cff, 0.45, 0.8, 0); }
@@ -466,9 +588,13 @@ export const world = {
       if (sh.taken) continue; sh.gem.rotation.y = t * 2; sh.gem.position.y = 0.9 + Math.sin(t * 2.4 + sh.x) * 0.2;
       if (Math.hypot(p.x - sh.x, p.z - sh.z) < 1.9 && Math.abs(p.y - sh.y) < 3) { sh.taken = true; sh.grp.visible = false; G.game.takeShard(sh); }
     }
-    // let the Lantern Tree's canopy go see-through when the hero walks behind it in the fixed view
-    const behind = G.opts.camera !== 'free' && p.z < 2 && p.z > -17 && Math.abs(p.x) < 9.5;
-    for (const cm of this.canopy) cm.opacity += ((behind ? 0.22 : 1) - cm.opacity) * Math.min(1, dt * 6);
+    if (this.canopy.length) { // let the Lantern Tree's canopy go see-through when the hero walks behind it in the fixed view
+      const behind = G.opts.camera !== 'free' && p.z < 2 && p.z > -17 && Math.abs(p.x) < 9.5;
+      for (const cm of this.canopy) cm.opacity += ((behind ? 0.22 : 1) - cm.opacity) * Math.min(1, dt * 6);
+    }
     for (const n of this.npcs) { n.t += dt; if (Math.hypot(p.x - n.m.root.position.x, p.z - n.m.root.position.z) < 50) animate(n.m, { t: n.t, run: 0 }, dt); }
-  },
-};
+    // walking far enough into a pass loads the region beyond
+    this.exitT -= dt;
+    if (this.exitT <= 0 && !G.player.dead) for (const e of EXITS[this.id]) if (e.at(p.x, p.z)) { this.exitT = 2; G.game.changeRegion(e.to); break; }
+  }
+}

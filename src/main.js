@@ -5,7 +5,8 @@ import { input } from './input.js';
 import { audio } from './audio.js';
 import { fx } from './fx.js';
 import { ui } from './ui.js';
-import { world } from './world.js';
+import { getRegion, buildMap, memoriesFound, loadPlaced } from './world.js';
+import { loadTerrain, heightAt as groundAt, regionAt } from './terrain.js';
 import { buildShrine } from './shrine.js';
 import { Player } from './player.js';
 import { updateCombat, clearCombat, dropMotes, after } from './combat.js';
@@ -88,7 +89,7 @@ const CLASSIC = { pitch: 0.9, fov: 36, zoom: 30, zoomMin: 22, zoomMax: 44 };
 function setFov(f) { if (camera.fov !== f) { camera.fov = f; camera.updateProjectionMatrix(); } }
 function updateCamera(dt) {
   const c = G.cam;
-  if (G.atTitle || !G.player) { setFov(60); titleT += dt; const a = titleT * 0.05, y = world.heightAt(0, 0); camera.position.set(Math.sin(a) * 62, y + 24, Math.cos(a) * 62); camera.lookAt(0, y + 9, 0); return; }
+  if (G.atTitle || !G.player) { setFov(60); titleT += dt; const a = titleT * 0.05, y = groundAt(0, 0); camera.position.set(Math.sin(a) * 62, y + 24, Math.cos(a) * 62); camera.lookAt(0, y + 9, 0); return; }
   const p = G.player, L = G.lock && !G.lock.dead ? G.lock : null, classic = isClassic();
   setFov(classic ? CLASSIC.fov : 60);
   if (classic) {
@@ -129,6 +130,7 @@ function enterArea(area, x, z, yaw = 0) {
   if (G.area && G.area !== area) { scene.remove(G.area.group); if (G.area.kind === 'shrine') disposeGroup(G.area.group); }
   if (!area.group.parent) scene.add(area.group);
   G.area = area; G.interactables = area.interactables;
+  if (area.kind === 'overworld') { G.world = area; area.refresh(); }   // the region you are in
   const p = G.player; p.pos.set(x, 0, z); area.resolve(p.pos, p.radius, p); p.pos.y = area.heightAt(p.pos.x, p.pos.z); p.vel.set(0, 0, 0); p.yaw = yaw; p.grounded = true; if (!p.dead) p.setState('move');
   if (G.comp) G.comp.pos.set(p.pos.x + 1.4, p.pos.y, p.pos.z + 1.4);
   G.cam.yaw = yaw + Math.PI; G.cam.pitch = 0.34; G.cam.snap = true;
@@ -141,7 +143,7 @@ async function transition(fn) {
   G.cam.snap = true; await ui.fade(false);
   if (G.mode === 'cut') G.mode = 'play'; input.clear();
 }
-function placeAtWaystone(id) { const w = WAYSTONES.find((x) => x.id === id) || WAYSTONES[0]; enterArea(world, w.x + 2.8, w.z + 2.8, Math.atan2(-w.x - 2.8, -w.z - 2.8)); }
+function placeAtWaystone(id) { const w = WAYSTONES.find((x) => x.id === id) || WAYSTONES[0]; enterArea(getRegion(regionAt(w.x, w.z)), w.x + 2.8, w.z + 2.8, Math.atan2(-w.x - 2.8, -w.z - 2.8)); }
 
 function genWave(budget, f) {
   const pool = [[['husk', 1], 3], [['skitter', 0.6], 2.5], [['spitter', 1], 2]];
@@ -206,7 +208,7 @@ const game = {
     G.run = null; G.artCd = {}; ui.stack.length = 0; ui.el.tmenu.innerHTML = ''; ui.el.menu.classList.add('hidden'); ui.el.menu._chidden = true;
     if (!G.player) G.player = new Player(); else G.player.reset();
     const p = G.player; p.model.root.visible = true; p.fullRestore(); p.gauge = 0;
-    clearEntities(); world.refresh(); world.respawnAll();
+    clearEntities(); G.world.respawnAll();
     placeAtWaystone(G.save.respawn); K.summonActive(true);
     document.getElementById('title').classList.add('hidden'); ui.showHud(true); G.atTitle = false; G.mode = 'play'; lastBiome = null; input.clear();
     if (G.save.quest === 0) ui.say(TALK.intro, () => game.tip('move'));
@@ -214,7 +216,7 @@ const game = {
   },
   quit() {
     game.save(); clearEntities(); G.run = null; if (G.comp) { G.comp.dispose(); G.comp = null; }
-    if (G.area !== world) enterArea(world, 9, -9); world.resetZones();
+    const home = getRegion('meadow'); if (G.area !== home) enterArea(home, 9, -9); home.resetZones();
     G.player.model.root.visible = false; ui.showHud(false); document.getElementById('title').classList.remove('hidden'); G.atTitle = true; G.mode = 'title'; game.setMood('title'); ui.titleMenu(true);
   },
   tip(id) {
@@ -261,9 +263,9 @@ const game = {
     const p = G.player, A = G.area; clearEntities();
     if (A.kind === 'shrine' && A.mode === 'shrine') { A.resetRooms(); const r = A.respawnPoint(); p.dead = false; enterArea(A, r.x, r.z, Math.PI); }
     else if (A.kind === 'shrine') {
-      const f = G.run ? G.run.floor : 0, abyss = A.mode === 'abyss'; G.run = null; const r = game.returnPos || { x: 9, z: -9 }; p.dead = false; world.resetZones(); enterArea(world, r.x, r.z, 0);
+      const f = G.run ? G.run.floor : 0, abyss = A.mode === 'abyss'; G.run = null; const r = game.returnPos || { x: 9, z: -9 }; p.dead = false; G.world.resetZones(); enterArea(getRegion(regionAt(r.x, r.z)), r.x, r.z, 0);
       if (abyss) ui.toast(`The Abyss claimed you on floor ${f}. Record: floor ${G.save.abyssBest}.`, 'gold', 5);
-    } else { world.resetZones(); p.dead = false; placeAtWaystone(G.save.respawn); }
+    } else { G.world.resetZones(); p.dead = false; placeAtWaystone(G.save.respawn); }
     p.reset(); p.fullRestore(); p.gauge = 0; G.artCd = {}; K.summonActive(true); game.save();
   },
   toggleLock, lockNext,
@@ -291,14 +293,19 @@ const game = {
   },
   useWaystone(id) {
     const s = G.save;
-    if (!s.waystones[id]) { s.waystones[id] = true; world.refresh(); audio.sfx('chest'); ui.toast('Waystone awakened.', 'gold'); fx.column(G.player.pos, 0x6ff0ff, 7, 40); }
+    if (!s.waystones[id]) { s.waystones[id] = true; G.world.refresh(); audio.sfx('chest'); ui.toast('Waystone awakened.', 'gold'); fx.column(G.player.pos, 0x6ff0ff, 7, 40); }
     ui.waystoneMenu(id);
   },
   rest(id) {
-    const p = G.player; G.save.respawn = id; clearEntities(); world.respawnAll(); p.fullRestore(); G.artCd = {}; game.save();
+    const p = G.player; G.save.respawn = id; clearEntities(); G.world.respawnAll(); p.fullRestore(); G.artCd = {}; game.save();
     audio.sfx('heal'); fx.column(p.pos, 0x6ff0c8, 5, 40); ui.toast('Rested. Your journey is saved.', 'gold');
   },
-  travel(id) { transition(() => { clearEntities(); world.resetZones(); G.save.respawn = id; placeAtWaystone(id); audio.sfx('portal'); game.save(); }); },
+  // walking far enough into a pass loads the region on the other side (world.js)
+  changeRegion(id) {
+    const p = G.player, x = p.pos.x, z = p.pos.z, yaw = p.yaw;
+    transition(() => { clearEntities(); G.world.resetZones(); enterArea(getRegion(id), x, z, yaw); });
+  },
+  travel(id) { transition(() => { clearEntities(); G.world.resetZones(); G.save.respawn = id; placeAtWaystone(id); audio.sfx('portal'); game.save(); }); },
   fount() { const p = G.player; p.fullRestore(); audio.sfx('heal'); fx.column(p.pos, 0x6ff0c8, 5, 40); ui.toast('Restored. You will return here if you fall.', 'gold'); },
   openChest(ch) {
     const s = G.save, r = ch.reward; s.chests[ch.id] = 1; ch.opened = true; ch.lid.rotation.x = -1.9; audio.sfx('chest');
@@ -308,7 +315,7 @@ const game = {
   },
   takeShard(sh) {
     const s = G.save; s.shards[sh.id] = 1; s.sigils++; audio.sfx('chest'); fx.column({ x: sh.x, y: sh.y, z: sh.z }, 0x9adfff, 8, 60);
-    const total = Object.keys(s.shards).length, m = (MEMORIES[sh.biome] || [])[(world.memoriesFound()[sh.biome] || 1) - 1];
+    const total = Object.keys(s.shards).length, m = (MEMORIES[sh.biome] || [])[(memoriesFound()[sh.biome] || 1) - 1];
     ui.toast(`Echo Shard ${total} of 16. +1 Skill Sigil`, 'gold', 4); game.save();
     // each shard holds a memory from before the Hush; the last one found adds Maren's lullaby
     const lines = m ? memoryLines(m) : [];
@@ -322,7 +329,7 @@ const game = {
     const def = SHRINES[id], p = G.player, door = 'door' + id;
     if (DOORS[id] && !G.save.tips[door]) { G.save.tips[door] = 1; ui.say([['', DOORS[id]]], () => game.enterShrine(id)); return; }
     transition(() => {
-      game.returnPos = { x: p.pos.x, z: p.pos.z }; clearEntities(); world.resetZones();
+      game.returnPos = { x: p.pos.x, z: p.pos.z }; clearEntities(); G.world.resetZones();
       const A = buildShrine(def, { onClear: (room, area) => game.shrineClear(def, room, area) });
       enterArea(A, A.start.x, A.start.z, Math.PI); ui.banner(def.name, 'Recommended level ' + def.level); game.setMood('shrine'); audio.sfx('portal');
     });
@@ -333,7 +340,7 @@ const game = {
     after(1.8, () => {
       A.addPortal(0, room.cz, 'Return to the surface', () => game.leaveArea());
       if (!first) { ui.toast('The guardian falls again.', 'gold'); return; }
-      s.shrines[id] = true; s.relics[id] = true; s.sigils += 2; s.quest = Math.max(s.quest, SHRINE_ORDER.indexOf(id) + 2); world.refresh(); G.player.recalc(); audio.sfx('bound');
+      s.shrines[id] = true; s.relics[id] = true; s.sigils += 2; s.quest = Math.max(s.quest, SHRINE_ORDER.indexOf(id) + 2); G.world.refresh(); G.player.recalc(); audio.sfx('bound');
       const lines = [...(FREED[id] || [])];
       if (id === 'hollow') lines.push(['', 'The Hush is broken. You gain 2 Skill Sigils.'], ['', 'Thank you for playing Hushfall.'], ['', 'The Abyss, the Hush Rifts and the rarest Kith are still out there.']);
       else lines.push(['', `The ${def.name.replace(/^The /, '')} wakes. You claim the ${def.relic}. ${def.relicDesc} You also gain 2 Skill Sigils.`], ['', OPENS[id]]);
@@ -343,7 +350,7 @@ const game = {
   leaveArea() {
     transition(() => {
       clearEntities(); G.run = null; const r = game.returnPos || { x: 9, z: -9 };
-      enterArea(world, r.x, r.z, Math.atan2(-r.x, -r.z)); G.player.recalc(); lastBiome = null; game.save();
+      enterArea(getRegion(regionAt(r.x, r.z)), r.x, r.z, Math.atan2(-r.x, -r.z)); G.player.recalc(); lastBiome = null; game.save();
     });
   },
   useWell() {
@@ -356,7 +363,7 @@ const game = {
     const f = run.floor, bossF = f % 5 === 0, bid = ['ghorn', 'cindermaw', 'brine', 'skarn', 'king'][(Math.floor(f / 5) - 1 + 5) % 5];
     const def = { id: 'abyss', name: 'The Abyss', el: bossF ? BOSS[bid].el : pick(['verdant', 'ember', 'tide', 'storm', 'gloam']), level: Math.round(5 + f * 1.6), boss: bid, rooms: [bossF ? { t: 'boss' } : { t: 'combat', waves: genWaves(f) }] };
     transition(() => {
-      clearEntities(); world.resetZones();
+      clearEntities(); G.world.resetZones();
       const A = buildShrine(def, { mode: 'abyss', exitLabel: 'Abandon the descent', onClear: (room, area) => game.abyssClear(room, area) });
       enterArea(A, A.start.x, A.start.z, Math.PI); ui.banner('The Abyss', 'Floor ' + f); game.setMood('shrine'); audio.sfx('portal');
     });
@@ -378,7 +385,7 @@ const game = {
     const s = G.save, lvl = [5, 10, 15, 20, 26][idx], p = G.player, f = 2 + idx * 2.5;
     const def = { id, name: 'Hush Rift', el: 'gloam', level: lvl, rooms: [{ t: 'combat', waves: [genWave(3.5 + idx * 1.2, f), genWave(4.5 + idx * 1.3, f), genWave(5.5 + idx * 1.4, f)] }] };
     transition(() => {
-      game.returnPos = { x: p.pos.x, z: p.pos.z }; clearEntities(); world.resetZones();
+      game.returnPos = { x: p.pos.x, z: p.pos.z }; clearEntities(); G.world.resetZones();
       const A = buildShrine(def, { mode: 'rift', exitLabel: 'Leave the rift', onClear: (room, area) => {
         const first = !s.rifts[id], m = (first ? 120 : 40) + lvl * (first ? 20 : 6); game.addMotes(m); if (first) { s.rifts[id] = true; s.sigils++; }
         ui.toast(first ? `Hush Rift sealed. +${m} motes, +1 Skill Sigil` : `Rift quelled. +${m} motes`, 'gold', 4); area.addPortal(0, room.cz, 'Leave the rift', () => game.leaveArea()); game.save();
@@ -387,7 +394,7 @@ const game = {
     });
   },
 };
-G.game = game; G.ui = ui; G.world = world; G.trials = trials; G.rival = rival; G.finale = finale;
+G.game = game; G.ui = ui; G.trials = trials; G.rival = rival; G.finale = finale;
 
 function interact() {
   const p = G.player; if (p.dead) { ui.setPrompt(null); return; }
@@ -435,7 +442,7 @@ function frame(now) {
           if (p.dead && deathT > 0) { deathT -= raw; if (deathT <= 0) transition(() => game.respawn()); }
           // biome banner + music
           if (G.area.kind === 'overworld') {
-            const e = world.env(p.pos), b = e.w > 0.6 ? Object.keys(BIOME).find((k) => BIOME[k] === e.b) : e.w < 0.4 ? 'meadow' : lastBiome;
+            const b = regionAt(p.pos.x, p.pos.z);
             if (b && b !== lastBiome) { lastBiome = b; ui.banner(BIOME[b].name, BIOME[b].sub); game.setMood(BIOME[b].mood); }
             saveT += raw; if (saveT > 45 && G.combatT <= 0) { saveT = 0; game.save(); }
           } else if (G.boss && !G.boss.dead && mood !== 'boss') game.setMood('boss');
@@ -454,7 +461,8 @@ G.save = loadSave(); const hadSave = !!G.save; if (!G.save) G.save = newSave();
 await loadArt();   // optional custom art from assets/art.json (see CUSTOMIZE.md)
 if (ART.title) { document.getElementById('tlogo').textContent = ART.title; document.title = ART.title; }
 if (ART.subtitle) document.getElementById('tsub').textContent = ART.subtitle;
-world.build(); scene.add(world.group); G.area = world;
+await loadTerrain(); await loadPlaced(); buildMap();   // the shape of Vael (assets/world, made by tools/world/make_world.py) and what you set out on it in Blender
+G.world = getRegion('meadow'); scene.add(G.world.group); G.area = G.world;
 G.atTitle = true; ui.titleMenu(hadSave); audio.setMood('title');
 // a transfer link (...#save=CODE) offers to load that save on this device
 function checkTransferLink() {
@@ -467,9 +475,9 @@ checkTransferLink(); addEventListener('hashchange', checkTransferLink);
 // handy console helpers
 window.G = G; window.step = frame;
 window.dbg = {
-  tp: (x, z) => enterArea(G.area, x, z), give: (n = 5000) => { G.save.motes += n; G.save.sigils += 20; G.save.threads += 20; },
+  tp: (x, z) => enterArea(G.area.kind === 'overworld' ? getRegion(regionAt(x, z)) : G.area, x, z), give: (n = 5000) => { G.save.motes += n; G.save.sigils += 20; G.save.threads += 20; },
   lvl: (n) => { G.save.level = n; G.player.recalc(); G.player.hp = G.player.maxHp; }, shrine: (id) => game.enterShrine(id),
-  open: () => { for (const id of SHRINE_ORDER) { G.save.shrines[id] = true; G.save.relics[id] = true; } G.save.quest = 6; world.refresh(); G.player.recalc(); },
+  open: () => { for (const id of SHRINE_ORDER) { G.save.shrines[id] = true; G.save.relics[id] = true; } G.save.quest = 6; G.world.refresh(); G.player.recalc(); },
   kith: (sp, l = 5) => { K.addKith(sp, l); if (!G.comp) K.summonActive(); },
 };
 requestAnimationFrame(frame);

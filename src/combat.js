@@ -13,9 +13,11 @@ export function moveXZ(ent, vx, vz, dt) {
   const area = G.area, pos = ent.pos, ox = pos.x, oz = pos.z;
   pos.x += vx * dt; pos.z += vz * dt;
   area.resolve(pos, ent.radius, ent);
+  // a region's edge (the crest of its mountains): slide along it rather than cross
+  if (area.allowed && !area.allowed(pos.x, pos.z) && area.allowed(ox, oz)) { if (area.allowed(pos.x, oz)) pos.z = oz; else if (area.allowed(ox, pos.z)) pos.x = ox; else { pos.x = ox; pos.z = oz; } }
   if (area.slope) {
     const h0 = area.heightAt(ox, oz);
-    const ok = (x, z) => { const h1 = area.heightAt(x, z), d = Math.hypot(x - ox, z - oz); return !(d > 1e-4 && (h1 - h0) / d > 1.2 && h1 > pos.y + 0.25); };
+    const ok = (x, z) => { const h1 = area.heightAt(x, z), d = Math.hypot(x - ox, z - oz); return !(d > 1e-4 && (h1 - h0) / d > 0.85 && h1 > pos.y + 0.25); };
     if (!ok(pos.x, pos.z)) { if (ok(pos.x, oz)) pos.z = oz; else if (ok(ox, pos.z)) pos.x = ox; else { pos.x = ox; pos.z = oz; } }
   }
 }

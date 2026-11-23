@@ -129,7 +129,7 @@ export const PASS = { ember: { x: 128, z: 0, ax: 'x' }, tide: { x: 0, z: 128, ax
 
 export const WAYSTONES = [
   { id: 'village', name: 'Lanternrest', x: 9, z: -12 },
-  { id: 'ember', name: 'Emberridge Gate', x: 160, z: 7 },
+  { id: 'ember', name: 'Emberridge Gate', x: 152, z: 8 },
   { id: 'tide', name: 'Mirrormere Shore', x: -7, z: 160 },
   { id: 'storm', name: 'Stormreach Stair', x: 7, z: -160 },
   { id: 'gloam', name: 'Gloamwood Edge', x: -160, z: -7 },
@@ -139,8 +139,8 @@ const C = (x, z, lvl, list) => ({ x, z, lvl, list });
 export const CAMPS = [
   C(55, 48, 1, ['husk', 'husk', 'skitter']), C(-45, 78, 2, ['husk', 'skitter', 'skitter', 'spitter']),
   C(82, -42, 3, ['husk', 'husk', 'spitter', 'skitter', 'skitter']), C(-92, -14, 3, ['husk', 'husk', 'spitter', 'spitter']),
-  C(195, 58, 6, ['husk', 'husk', 'husk', 'spitter']), C(228, -12, 7, ['brute', 'skitter', 'skitter', 'skitter']),
-  C(268, 88, 8, ['husk', 'husk', 'spitter', 'spitter', 'brute']), C(215, -110, 8, ['E:husk', 'skitter', 'skitter', 'skitter', 'skitter']),
+  C(178, 39, 6, ['husk', 'husk', 'husk', 'spitter']), C(205, -47, 7, ['brute', 'skitter', 'skitter', 'skitter']),
+  C(270, -43, 8, ['husk', 'husk', 'spitter', 'spitter', 'brute']), C(265, 35, 8, ['E:husk', 'skitter', 'skitter', 'skitter', 'skitter']),
   C(-58, 198, 11, ['husk', 'husk', 'warder', 'spitter']), C(12, 232, 12, ['warder', 'warder', 'spitter', 'spitter']),
   C(-92, 268, 13, ['brute', 'warder', 'husk', 'husk']), C(110, 215, 13, ['E:spitter', 'skitter', 'skitter', 'skitter', 'skitter']),
   C(58, -198, 16, ['wraith', 'skitter', 'skitter', 'skitter']), C(-12, -232, 17, ['warder', 'warder', 'wraith']),
@@ -150,7 +150,7 @@ export const CAMPS = [
 ];
 export const KZONES = [
   { x: 40, z: -70 }, { x: 10, z: 95 }, { x: -95, z: 34 },
-  { x: 188, z: -58 }, { x: 252, z: 38 }, { x: 62, z: 192 }, { x: -38, z: 248 },
+  { x: 169, z: -44 }, { x: 245, z: 70 }, { x: 62, z: 192 }, { x: -38, z: 248 },
   { x: -62, z: -192 }, { x: 38, z: -248 }, { x: -188, z: 62 }, { x: -252, z: -38 },
 ];
 export const KTABLE = {
@@ -161,20 +161,23 @@ export const KTABLE = {
   gloam: [['duskmoth', 53], ['umbrafox', 12], ['shellgar', 10], ['magmole', 10], ['galehawk', 15]],
 };
 export const RIFTS = [
-  { id: 'r0', x: 98, z: 38 }, { id: 'r1', x: 272, z: -130 }, { id: 'r2', x: -130, z: 272 }, { id: 'r3', x: 130, z: -272 }, { id: 'r4', x: -272, z: 130 },
+  { id: 'r0', x: 98, z: 38 }, { id: 'r1', x: 230, z: -125 }, { id: 'r2', x: -130, z: 272 }, { id: 'r3', x: 130, z: -272 }, { id: 'r4', x: -272, z: 130 },
 ];
 
 // Spots added for the story's teaching plan (STORY.md, build step 3). They are kept apart from CAMPS
 // and KZONES on purpose: those also shape the terrain and props when the world is generated, and
 // changing them would move every Echo Shard in existing saves. These change nothing else.
-export const SPRINGS = { x: 164, z: 90 };   // Emberridge hot springs, south of the Emberridge Gate Waystone
+export const SPRINGS = { x: 164, z: 90 };
+// Emberridge is one great volcano (made by tools/world/make_world.py). The Shrine of Cinders sits on an
+// island in the lava lake of its crater; a road climbs the flanks, over the rim and down a causeway.
+export const VOLCANO = { x: 245, z: 0, base: 104, rim: 26, top: 70, floor: 57, lava: 58.4, island: 9, islandH: 60.5 };   // Emberridge hot springs, south of the Emberridge Gate Waystone
 export const EXTRA_ZONES = [
   // a stray Cinderpup napping by Brannoc's forge: an Ember Kith for the Shrine of Roots, if you have none
   { kind: 'kith', x: -21, z: -4, r: 1.5, n: 1, lvl: 2, table: [['cinderpup', 1]], cond: 'stray' },
   // Tide Kith soaking in the hot springs: the counter for the Shrine of Cinders
   { kind: 'kith', x: SPRINGS.x, z: SPRINGS.z, r: 6, n: 2, table: [['puddlefin', 70], ['shellgar', 30]] },
   // the first of each new enemy type, met on its own on the way from the Waystone to the shrine
-  { kind: 'camp', x: 188, z: -9, r: 3, lvl: 6, list: ['brute'] },
+  { kind: 'camp', x: 175, z: -6, r: 3, lvl: 6, list: ['brute'] },
   { kind: 'camp', x: -6, z: 187, r: 3, lvl: 11, list: ['warder'] },
   { kind: 'camp', x: -19, z: -192, r: 3, lvl: 16, list: ['wraith'] },
 ];
@@ -183,7 +186,7 @@ const W = (...a) => a;
 export const SHRINES = {
   roots: { id: 'roots', name: 'Shrine of Roots', biome: 'meadow', el: 'verdant', level: 3, x: -62, z: -66, boss: 'ghorn', relic: 'Heart of Root', relicDesc: 'A third Kith may now walk beside you.',
     rooms: [{ t: 'combat', waves: [W('husk', 'husk', 'skitter'), W('husk', 'spitter', 'skitter', 'skitter')] }, { t: 'gauntlet' }, { t: 'combat', waves: [W('spitter', 'spitter', 'husk', 'husk'), W('brute')] }, { t: 'fount' }, { t: 'boss' }] },
-  cinders: { id: 'cinders', name: 'Shrine of Cinders', biome: 'ember', el: 'ember', level: 8, x: 258, z: -58, boss: 'cindermaw', relic: 'Ember Sigil', relicDesc: 'Unison Burst: when the Bond gauge is full, unleash it.',
+  cinders: { id: 'cinders', name: 'Shrine of Cinders', biome: 'ember', el: 'ember', level: 8, x: 245, z: 0, boss: 'cindermaw', relic: 'Ember Sigil', relicDesc: 'Unison Burst: when the Bond gauge is full, unleash it.',
     rooms: [{ t: 'combat', waves: [W('husk', 'husk', 'husk', 'spitter'), W('brute', 'skitter', 'skitter', 'skitter')] }, { t: 'gauntlet' }, { t: 'combat', waves: [W('spitter', 'spitter', 'skitter', 'skitter', 'skitter'), W('brute', 'husk', 'husk'), W('E:husk', 'spitter')] }, { t: 'fount' }, { t: 'boss' }] },
   tides: { id: 'tides', name: 'Shrine of Tides', biome: 'tide', el: 'tide', level: 13, x: 58, z: 258, boss: 'brine', relic: 'Tidewalker Pearl', relicDesc: 'Leap a second time in mid-air.',
     rooms: [{ t: 'combat', waves: [W('warder', 'husk', 'husk'), W('warder', 'spitter', 'spitter', 'skitter', 'skitter')] }, { t: 'gauntlet' }, { t: 'combat', waves: [W('brute', 'spitter', 'spitter'), W('warder', 'warder', 'husk', 'husk'), W('E:brute')] }, { t: 'gauntlet' }, { t: 'fount' }, { t: 'boss' }] },
@@ -208,7 +211,7 @@ export const NPCS = [
 export const QUESTS = [
   { text: 'The last lantern on the Lantern Tree is fading. Find Elder Maren beneath it.', at: [4.5, 6.5] },
   { text: 'Wake Ghorn, the Rootwarden, in the Shrine of Roots to the northwest.', at: [-62, -66] },
-  { text: 'Take the east pass to Emberridge. Free the beast in the Shrine of Cinders.', at: [258, -58] },
+  { text: 'Take the east pass to Emberridge. Climb the volcano to the Shrine of Cinders in its crater.', at: [245, 0] },
   { text: 'Take the south pass to Mirrormere. Wake the drowned Cantor in the Shrine of Tides.', at: [58, 258] },
   { text: 'Climb the north pass to Stormreach. Face Skarn in the Shrine of Gales.', at: [-58, -258] },
   { text: 'Cross Gloamwood by the west pass. End the Hush at the Hollow Court.', at: [-258, 58] },

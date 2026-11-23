@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { BIOME } from './data.js';
 
-export const ART = { sprites: {}, models: {}, cloneModel: null, ground: null, floor: null, title: null, subtitle: null, file: null };
+export const ART = { sprites: {}, models: {}, cloneModel: null, groundTex: null, groundStrength: 1, ground: null, floor: null, title: null, subtitle: null, file: null };
 
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const hex = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && /^#?[0-9a-f]{6}$/i.test(v) ? parseInt(v.replace('#', ''), 16) : null);
@@ -27,9 +27,12 @@ export async function loadArt() {
   // ?art=name loads assets/art.name.json instead, e.g. ?art=example to preview the bundled example
   const name = new URLSearchParams(location.search).get('art');
   const url = 'assets/art' + (name ? '.' + name.replace(/\W/g, '') : '') + '.json';
-  let man;
-  try { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) return; man = await r.json(); } catch (e) { return; }
-  if (!man || typeof man !== 'object') return;
+  let man = null;
+  try { const r = await fetch(url, { cache: 'no-store' }); if (r.ok) man = await r.json(); } catch (e) { /* no custom art */ }
+  if (!man || typeof man !== 'object') man = null;
+  const ground = loadGround(man && man.groundTextures);   // the painted ground is part of the game's own look
+  if (man && Number.isFinite(Number(man.groundStrength))) ART.groundStrength = num(man.groundStrength, 0, 2, 1);
+  if (!man) { await ground; return; }
   ART.file = url;
   if (typeof man.title === 'string') ART.title = man.title.slice(0, 40);
   if (typeof man.subtitle === 'string') ART.subtitle = man.subtitle.slice(0, 80);
@@ -54,7 +57,33 @@ export async function loadArt() {
   const models = man.models && typeof man.models === 'object' ? man.models : {};
   const mkeys = Object.keys(models).filter((k) => KEY.test(k) && models[k] && safeModel(models[k].file));
   if (mkeys.length) jobs.push(loadModels(models, mkeys));
-  await Promise.all(jobs);
+  await Promise.all([...jobs, ground]);
+}
+
+// The painted ground: one tileable texture per region plus a cliff rock (assets/textures/ground/,
+// painted by tools/textures/paint_ground.py). "groundTextures" in art.json can swap any of them for
+// your own image. Each texture adds detail on top of the region's colours, so its average colour is
+// measured here and divided out in the shader.
+export const GROUND = ['meadow', 'ember', 'tide', 'storm', 'gloam', 'cliff'];
+const GROUND_SIZE = { meadow: 7, ember: 9, tide: 8, storm: 8, gloam: 7, cliff: 10 };   // world units per repeat
+function meanLinear(img) {
+  const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
+  x.drawImage(img, 0, 0, 32, 32); const d = x.getImageData(0, 0, 32, 32).data, lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  let r = 0, g = 0, b = 0; for (let i = 0; i < d.length; i += 4) { r += lin(d[i]); g += lin(d[i + 1]); b += lin(d[i + 2]); }
+  const n = d.length / 4; return new THREE.Vector3(Math.max(0.01, r / n), Math.max(0.01, g / n), Math.max(0.01, b / n));
+}
+async function loadGround(custom) {
+  custom = custom && typeof custom === 'object' ? custom : {};
+  const out = {};
+  await Promise.all(GROUND.map(async (k) => {
+    const d = custom[k], file = d && safeFile(d.file) ? d.file : `textures/ground/${k}.jpg`;
+    let tex = await loadTex(file, false, true);
+    if (!tex && file !== `textures/ground/${k}.jpg`) tex = await loadTex(`textures/ground/${k}.jpg`, false, true);
+    if (!tex) return;
+    tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.anisotropy = 8;
+    out[k] = { tex, mean: meanLinear(tex.image), size: num(d && d.size, 0.5, 64, GROUND_SIZE[k]) };
+  }));
+  if (GROUND.every((k) => out[k])) ART.groundTex = out;   // all or nothing: otherwise the plain painted colours stay
 }
 
 // 3D models (.glb or .gltf, for example exported from Blender). The loader is only fetched when
