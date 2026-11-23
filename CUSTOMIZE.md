@@ -249,78 +249,82 @@ down the far side (only the passes lead on).
 ## 5. Sculpting the world and building on it in Blender
 
 You can reshape the land and set out buildings in Blender, then bring both back
-into the game. There are two files to double-click in the `blender` folder:
+into the game. The world is split into one Blender file per zone, so you can
+work on one piece at a time, plus one file for the building pieces.
 
-1. **Open world in Blender.command** makes `blender/world.blend` (the first time
-   takes about half a minute) and opens it. Inside:
-   - **Terrain**: the valley in five pieces, one per zone (Lanternrest Meadow,
-     Emberridge, Gloamwood, Mirrormere, Stormreach), each in its own coloured
-     collection. They are coloured by region (roads tan, rock grey, snow white).
-     One Blender unit is one game unit (the hero is about 2 tall). North is up in
-     Top view (numpad 7).
-   - **Places**: an arrow for every waystone, shrine, camp, grove and rift, with
-     its name, grouped by zone the same way. They are there so you know what not
-     to bury; moving them does not move anything in the game (that is
-     `src/data.js`).
-   - **Kit**: a shelf of starter pieces just north of the map: cottage, chapel,
-     gravestone, grave cross, fence, crop field, wheat field, haystack,
-     signpost, watchtower, ruin wall, stilt hut, crag, well, lamp post and cart.
-   - **Placed**: the pieces set out on the terrain. It starts with a small
+1. Double-click **Update Blender files.command** in the `blender` folder. It
+   makes the files (about a minute the first time) and opens their folder:
+   - `blender/zones/Lanternrest Meadow.blend`, `Emberridge.blend`,
+     `Gloamwood.blend`, `Mirrormere.blend` and `Stormreach.blend`, one per zone.
+   - `blender/Kit.blend`, the building pieces.
+2. Double-click the zone you want to work on. Inside:
+   - **Terrain**: the zone's ground, to sculpt. It is coloured by region (roads
+     tan, rock grey, snow white). One Blender unit is one game unit (the hero is
+     about 2 tall). North is up in Top view (numpad 7).
+   - **Around (for reference)**: a darker ring of the neighbouring land, so you
+     can see what the zone meets. You cannot select or change it here.
+   - **Places**: an arrow for every waystone, shrine, camp, grove and rift in
+     the zone, with its name. They are there so you know what not to bury;
+     moving them does not move anything in the game (that is `src/data.js`).
+   - **Kit shelf**: a row of pieces on a dark slab just outside the zone, to
+     place from: cottage, chapel, gravestone, grave cross, fence, crop field,
+     wheat field, haystack, signpost, watchtower, ruin wall, stilt hut, crag,
+     well, lamp post and cart.
+   - **Placed**: the pieces set out in this zone. The meadow starts with a small
      chapel and graveyard east of Lanternrest and a farmstead to the west, to
      show how it works. Move them, delete them, or add your own.
-2. Work in Blender, then save (Cmd+S).
-3. **Bring world into game.command** reads the saved file back, rebuilds the
-   world, and checks every place can still be reached. Refresh the game.
-
-**Working on one zone at a time.** In the Outliner (top right), click the eye
-next to a zone's collection to hide it, or Ctrl+click the eye of the one you want
-to see only it. Or select a zone and press numpad / (View, Local View) to show it
-alone; press it again to bring the rest back. The zones meet along the region
-borders (mostly the mountain crests), sharing the points on the border, so if you
-sculpt right up to a border the next zone does not follow; smooth across it from
-that zone too.
+3. Save (Cmd+S). Work on as many zones as you like, saving each.
+4. Double-click **Bring world into game.command**. It reads every zone file and
+   `Kit.blend`, rebuilds the world, and checks every place can still be reached.
+   Refresh the game.
 
 **No mouse?** On a Mac trackpad, two-finger dragging orbits the view, Shift with
 two fingers pans, and pinching zooms. In Edit, Preferences, Input, turning on
-Emulate 3 Button Mouse also lets Option and click-drag orbit.
+Emulate 3 Button Mouse also lets Option and click-drag orbit. Press Home (or
+View, Frame All) if you lose your place.
 
-**Sculpting.** Select a zone, switch to Sculpt Mode, and use any brush (Draw,
-Clay Strips, Smooth, Flatten, Scrape, Grab). The game keeps only the up and down
-change, so a brush that drags ground sideways works, but what counts is the new
-height at each point. Your sculpting is saved as `assets/world/sculpt.bin`, a
-layer laid over the generated land, so it survives the generator being run
-again. The road colours stay where the generator put them, so if you raise a
-hill across a road, the road climbs it. If the check after bringing it in says a
-place is unreachable, smooth the slope near it in Blender and bring it in again.
-To throw your sculpting away, delete `assets/world/sculpt.bin` and
-`blender/world.blend`, then open the world in Blender again.
+**Sculpting.** Select the zone's terrain, switch to Sculpt Mode, and use any
+brush (Draw, Clay Strips, Smooth, Flatten, Scrape, Grab). The game keeps only
+the up and down change, so a brush that drags ground sideways works, but what
+counts is the new height at each point. Your sculpting is saved as
+`assets/world/sculpt.bin`, a layer laid over the generated land, so it survives
+the generator being run again. The road colours stay where the generator put
+them, so if you raise a hill across a road, the road climbs it. If the check
+after bringing it in says a place is unreachable, smooth the slope near it and
+bring it in again. Zones meet along the region borders (mostly the mountain
+crests). If you sculpt right up to a border, the next zone does not follow, so
+smooth across it from that zone's file too. To throw all your sculpting away,
+delete `assets/world/sculpt.bin` and the `blender/zones` folder, then run
+Update Blender files again.
 
 **Placing pieces.** Select a piece on the shelf, press Alt+D (or Shift+D), and
-move the copy onto the terrain. Anything standing on the map counts as placed,
-and anything on the shelf north of the map counts as a piece, whichever
-collection it is in (the Placed collection just keeps things tidy). Turn a piece
-with R Z, and scale it with S. Each piece's origin (the small dot) is its
-footing: in the game it stands on the ground at that point, at the same height
-above or below the ground as in Blender, so pieces stay on the ground even if
-you sculpt under them later.
+move the copy onto the terrain. Anything off the dark slab counts as placed,
+whichever collection it is in (the Placed collection just keeps things tidy).
+Turn a piece with R Z, and scale it with S. Each piece's origin (the small dot)
+is its footing: in the game it stands on the ground at that point, at the same
+height above or below the ground as in Blender, so pieces stay on the ground
+even if you sculpt under them later.
 
-**Changing a piece or making your own.** Edit any shelf piece and every copy of
-it changes in the game. For a new piece, build it on the shelf (north of the
-map) with its origin at its base, join its parts into one object (Ctrl+J),
-and give it a short name; that name is the piece. Colours come from its
-materials. A material with Emission turned on (any strength) glows at night,
-like the windows. Pieces block your path by their footprint; to let the hero
-walk through one (like the fields), add a custom property `solid` set to `0`
-(Object properties, Custom Properties).
+**Changing a piece or making your own.** Do this in `Kit.blend`. Every object
+in it is a piece, except the slab and the plain figure standing by for scale
+(as tall as the hero). Edit a piece there and, after Update Blender files, every
+copy of it in every zone changes too (in the game it changes as soon as you
+bring the world back). For a new piece, build it with its origin at its base,
+join its parts into one object (Ctrl+J), and give it a short name; that name is
+the piece. It joins the shelf in every zone file the next time you run Update
+Blender files. Colours come from its materials. A material with Emission turned
+on (any strength) glows at night, like the windows. Pieces block your path by
+their footprint; to let the hero walk through one (like the fields), add a
+custom property `solid` set to `0` (Object properties, Custom Properties).
 
-The pieces are saved as `assets/models/kit/<name>.glb` and their places as
-`assets/world/placed.json`. `blender/world.blend` itself stays on this computer
-(it is rebuilt from those files if it goes missing, your own pieces included).
-
-The script behind both files is `tools/world/blender.py`. Opening the world
-again while `world.blend` exists refreshes only Terrain and Places (keeping your
-Kit and Placed), and it will not replace a zone that has sculpting you have not
-brought into the game yet.
+**What is kept where.** The pieces are saved as `assets/models/kit/<name>.glb`,
+where they stand as `assets/world/placed.json`, and your sculpting as
+`assets/world/sculpt.bin`; those are what the game uses. `Kit.blend` is kept
+with the game too. The zone files stay on this computer and can always be made
+again: running Update Blender files refreshes each zone's terrain, places and
+shelf (keeping what you placed), but leaves alone any zone with sculpting you
+have not brought into the game yet. The script behind both double-click files
+is `tools/world/blender.py`.
 
 ## 6. Not swappable yet
 

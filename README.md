@@ -80,9 +80,10 @@ in Blender; add `?art=none` to the address to see the original blocky hero.
 - `src/`: the game, as plain JavaScript modules (no build step).
 - `assets/`: your own art goes here (see CUSTOMIZE.md). `assets/models/hero.glb`
   is the hero, and `assets/example/` holds a sample sprite.
-- `blender/`: the hero's Blender file and the script that builds it, and the
-  two double-click files that take the world into Blender and back (see
-  CUSTOMIZE.md, section 5).
+- `blender/`: the hero's Blender file and the script that builds it,
+  `Kit.blend` (the building pieces), and the two double-click files that make a
+  Blender file for each zone and bring your work back (see CUSTOMIZE.md,
+  section 5).
 - `assets/world/`: the shape of the valley (heights, roads, regions), made by
   `tools/world/make_world.py`, plus your sculpting and the pieces placed in
   Blender. `assets/models/kit/`: those pieces. `assets/textures/ground/`: the

@@ -1,35 +1,47 @@
-"""Hushfall's world, to Blender and back.
+"""Hushfall's world, to Blender and back, one file per zone.
 
 Run by Blender (the two .command files in blender/ do this for you):
 
   Blender --background --factory-startup --python-exit-code 1 --python tools/world/blender.py -- send
   Blender --background --factory-startup --python-exit-code 1 --python tools/world/blender.py -- bring
 
-send   Makes blender/world.blend from the game's world, or refreshes it:
-         Terrain   the valley as five meshes, one per zone, each in its own collection. 1 Blender
-                   unit = 1 game unit, coloured by region (roads tan, rock grey, snow white).
-                   Blender X = game x, Blender Y = north (game -z), Blender Z = height.
-         Places    an arrow for every waystone, shrine, camp, grove and rift in src/data.js (for
-                   reference: moving them here does not move them in the game).
-         Kit       a shelf of building pieces north of the map. Made once, then yours to change.
-         Placed    your copies of Kit pieces, set out on the terrain.
-       If world.blend already exists, only Terrain and Places are refreshed, and only when no
-       zone has sculpting that still needs bringing into the game.
-bring  Reads blender/world.blend back: what you changed in the zones becomes
-       assets/world/sculpt.bin (the difference from the generated land), every Kit piece is saved
-       as assets/models/kit/<name>.glb, and Placed is listed in assets/world/placed.json. Then run tools/world/make_world.py, which
-       lays the sculpting over the land and checks every place can still be reached.
+send   Makes (or refreshes) the Blender files:
+         blender/Kit.blend          the building pieces, on a shelf. Made once, then yours: change
+                                    pieces or make new ones here.
+         blender/zones/<Zone>.blend one per zone (Lanternrest Meadow, Emberridge, Gloamwood,
+                                    Mirrormere, Stormreach), holding
+           Terrain      the zone's ground to sculpt. 1 Blender unit = 1 game unit, coloured by
+                        region (roads tan, rock grey, snow white). Blender X = game x, Blender Y =
+                        north (game -z), Blender Z = height.
+           Around       a darker ring of the neighbouring land, for reference (not selectable).
+           Places       an arrow for every waystone, shrine, camp, grove and rift in the zone (for
+                        reference: moving them does not move them in the game).
+           Kit shelf    copies of the Kit.blend pieces, to place from.
+           Placed       the pieces set out in this zone.
+       A zone file that already exists gets fresh terrain, places and shelf copies (keeping what
+       you placed), unless it has sculpting that still needs bringing into the game.
+bring  Reads them all back: what you changed in the zones becomes assets/world/sculpt.bin (the
+       difference from the generated land), every piece in Kit.blend is saved as
+       assets/models/kit/<name>.glb, and everything placed is listed in assets/world/placed.json.
+       Then run tools/world/make_world.py, which lays the sculpting over the land and checks every
+       place can still be reached.
 """
 import bpy, bmesh, json, math, os, re, sys
 import numpy as np
-from mathutils import Matrix
+from mathutils import Matrix, Quaternion
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 WORLD = os.path.join(ROOT, 'assets', 'world')
 KITDIR = os.path.join(ROOT, 'assets', 'models', 'kit')
-BLEND = os.path.join(ROOT, 'blender', 'world.blend')
-BROUGHT = os.path.join(ROOT, 'blender', 'world.brought')   # fingerprints of the zones last brought into the game
+KIT_BLEND = os.path.join(ROOT, 'blender', 'Kit.blend')
+ZDIR = os.path.join(ROOT, 'blender', 'zones')
+BROUGHT = os.path.join(ZDIR, '.brought')     # fingerprints of the zones last brought into the game
 HALF = 320.0
+AROUND = 40.0                               # how much of the neighbouring land each zone file shows
+# the five zones: (index in regions.bin, short name, file name, Blender colour tag)
+ZONES = [(0, 'meadow', 'Lanternrest Meadow', 'COLOR_04'), (1, 'ember', 'Emberridge', 'COLOR_01'), (2, 'gloam', 'Gloamwood', 'COLOR_06'),
+         (3, 'tide', 'Mirrormere', 'COLOR_05'), (4, 'storm', 'Stormreach', 'COLOR_03')]
+zone_path = lambda name: os.path.join(ZDIR, name + '.blend')
 
 
 def grid():
@@ -62,6 +74,29 @@ def srgb(hexv):
     return [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
 
 
+def base_name(n):
+    return n.rsplit('.', 1)[0] if '.' in n and n.rsplit('.', 1)[1].isdigit() else n
+
+
+def clean(n):
+    return re.sub(r'[^A-Za-z0-9_-]+', '_', base_name(n))
+
+
+def save(path, compress=True):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    bpy.ops.wm.save_as_mainfile(filepath=path, compress=compress, relative_remap=True)
+
+
+def view(cx, cy, dist):
+    for scr in bpy.data.screens:
+        for a in scr.areas:
+            if a.type != 'VIEW_3D': continue
+            for s in a.spaces:
+                if s.type != 'VIEW_3D': continue
+                s.shading.type = 'MATERIAL'; s.clip_end = 4000; s.clip_start = 0.1
+                r = s.region_3d; r.view_distance = dist; r.view_location = (cx, cy, 0)
+
+
 # ---------------------------------------------------------------- the terrain
 def terrain_colours(H, roads, regions, CELL):
     base = np.array([[96, 160, 78], [122, 84, 70], [100, 84, 146], [104, 172, 146], [122, 134, 150]], float) / 255
@@ -71,90 +106,99 @@ def terrain_colours(H, roads, regions, CELL):
     k = np.clip((H - 46) / 16, 0, 1)[..., None]; c = c * (1 - k) + 0.95 * k
     k = (roads / 255.0)[..., None] * 0.8; c = c * (1 - k) + np.array([0.82, 0.70, 0.48]) * k
     c = np.where((H < 0)[..., None], [0.25, 0.52, 0.82], c)
-    c = c ** 2.2   # to linear
-    return np.concatenate([c, np.ones(c.shape[:2] + (1,))], -1).astype(np.float32)
+    return c
 
 
-# the five zones, each its own object in its own collection (Blender colour tags)
-ZONES = [(0, 'meadow', 'Lanternrest Meadow', 'COLOR_04'), (1, 'ember', 'Emberridge', 'COLOR_01'), (2, 'gloam', 'Gloamwood', 'COLOR_06'),
-         (3, 'tide', 'Mirrormere', 'COLOR_05'), (4, 'storm', 'Stormreach', 'COLOR_03')]
-
-
-def terrain_material():
-    mat = bpy.data.materials.get('Terrain') or bpy.data.materials.new('Terrain'); nodes_on(mat)
+def vc_material(name, tint):
+    mat = bpy.data.materials.get(name) or bpy.data.materials.new(name); nodes_on(mat)
     nt = mat.node_tree; bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
     attr = next((n for n in nt.nodes if n.type == 'VERTEX_COLOR'), None) or nt.nodes.new('ShaderNodeVertexColor')
     attr.layer_name = 'Region'; nt.links.new(attr.outputs[0], bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = 1.0
-    mat.diffuse_color = (0.35, 0.55, 0.3, 1)
+    mat.diffuse_color = tint
     return mat
 
 
-def make_zones(N, NV, CELL, H, roads, regions, parent):
-    """One mesh per zone. Each square of the grid goes to the zone it lies in, and the points along a
-    border are shared, so the zones meet without gaps. Every point remembers where it is on the game's
-    grid (gid) and the height it was sent with (sent), so only what you change comes back."""
-    xs = -HALF + np.arange(NV) * CELL; X, Z = np.meshgrid(xs, xs)
-    CO = np.stack([X, -Z, H], -1).reshape(-1, 3).astype(np.float32)
-    RGBA = terrain_colours(H, roads, regions, CELL).reshape(-1, 4)
-    jj, ii = np.meshgrid(np.arange(N), np.arange(N), indexing='ij'); a = (jj * NV + ii).ravel()
-    quads = np.stack([a, a + NV, a + NV + 1, a + 1], -1); lab = regions[:N, :N].ravel()
-    mat = terrain_material(); out = []
-    for k, _, name, tag in ZONES:
-        q = quads[lab == k]
-        if not len(q): continue
-        used = np.unique(q); loc = np.searchsorted(used, q).ravel().astype(np.int32)
-        me = bpy.data.meshes.new(name)
-        me.vertices.add(len(used)); me.vertices.foreach_set('co', CO[used].ravel())
-        me.loops.add(len(loc)); me.loops.foreach_set('vertex_index', loc)
-        me.polygons.add(len(q)); me.polygons.foreach_set('loop_start', np.arange(0, len(loc), 4, dtype=np.int32))
-        me.update(calc_edges=True); me.validate()
-        me.color_attributes.new('Region', 'BYTE_COLOR', 'POINT').data.foreach_set('color', RGBA[used].ravel())
+def grow(mask, m):
+    """The mask, grown by m cells in every direction (a square)."""
+    def run(a, axis):
+        a = np.moveaxis(a, axis, 0).astype(np.int32); n = a.shape[0]
+        cs = np.concatenate([np.zeros((1,) + a.shape[1:], np.int32), np.cumsum(a, 0)]); i = np.arange(n)
+        return np.moveaxis((cs[np.minimum(i + m + 1, n)] - cs[np.maximum(i - m, 0)]) > 0, 0, axis)
+    return run(run(mask, 0), 1)
+
+
+def build_mesh(name, q, CO, RGB, ids):
+    used = np.unique(q); loc = np.searchsorted(used, q).ravel().astype(np.int32)
+    me = bpy.data.meshes.new(name)
+    me.vertices.add(len(used)); me.vertices.foreach_set('co', CO[used].ravel())
+    me.loops.add(len(loc)); me.loops.foreach_set('vertex_index', loc)
+    me.polygons.add(len(q)); me.polygons.foreach_set('loop_start', np.arange(0, len(loc), 4, dtype=np.int32))
+    me.update(calc_edges=True); me.validate()
+    rgba = np.concatenate([RGB[used] ** 2.2, np.ones((len(used), 1))], -1).astype(np.float32)   # to linear
+    me.color_attributes.new('Region', 'BYTE_COLOR', 'POINT').data.foreach_set('color', rgba.ravel())
+    if ids:
         me.attributes.new('gid', 'INT', 'POINT').data.foreach_set('value', used.astype(np.int32))
         me.attributes.new('sent', 'FLOAT', 'POINT').data.foreach_set('value', CO[used, 2])
-        me.materials.append(mat)
-        c = coll(name, parent); c.color_tag = tag
-        o = bpy.data.objects.new(name, me); c.objects.link(o); o['sent'] = fingerprint(o); out.append(o)
-    return out
+    return me
 
 
-def terrain_objects():
-    tc = bpy.data.collections.get('Terrain')
-    return sorted((o for o in tc.all_objects if o.type == 'MESH'), key=lambda o: o.name) if tc else []
+def make_zone(k, name, tag, N, NV, CELL, H, roads, regions):
+    """The zone's own ground, to sculpt (every point remembers where it is on the game's grid, gid, and
+    the height it was sent with, sent, so only what you change comes back), and a darker ring of the
+    land around it, for reference only."""
+    xs = -HALF + np.arange(NV) * CELL; X, Z = np.meshgrid(xs, xs)
+    CO = np.stack([X, -Z, H], -1).reshape(-1, 3).astype(np.float32)
+    RGB = terrain_colours(H, roads, regions, CELL).reshape(-1, 3)
+    jj, ii = np.meshgrid(np.arange(N), np.arange(N), indexing='ij'); a = (jj * NV + ii).ravel()
+    quads = np.stack([a, a + NV, a + NV + 1, a + 1], -1); mine = regions[:N, :N] == k
+    around = grow(mine, int(round(AROUND / CELL))) & ~mine
+    me = build_mesh(name, quads[mine.ravel()], CO, RGB, True); me.materials.append(vc_material('Terrain', (0.35, 0.55, 0.3, 1)))
+    c = coll('Terrain'); c.color_tag = tag
+    o = bpy.data.objects.new(name, me); c.objects.link(o); o['sent'] = fingerprint(o)
+    grey = RGB * 0.45 + 0.16
+    am = build_mesh('Around ' + name, quads[around.ravel()], CO, grey, False); am.materials.append(vc_material('Around', (0.3, 0.3, 0.3, 1)))
+    ao = bpy.data.objects.new('Neighbouring land', am); ao.hide_select = True; coll('Around (for reference)').objects.link(ao)
+    v = CO[np.unique(quads[mine.ravel()])]
+    return o, (v[:, 0].min() + v[:, 0].max()) / 2, (v[:, 1].min() + v[:, 1].max()) / 2, max(np.ptp(v[:, 0]), np.ptp(v[:, 1]))
 
 
-def read_terrain(objs, H, NV, CELL):
-    """Your sculpting, laid onto the game's grid: the new height wherever a zone was changed (where two
-    zones share a border point and both changed it, their average), and the game's height elsewhere."""
-    flat = H.ravel(); acc = np.zeros(NV * NV); cnt = np.zeros(NV * NV); notes = []
-    for o in objs:
-        me = o.data; n = len(me.vertices); co = np.zeros(n * 3, np.float32); me.vertices.foreach_get('co', co)
-        M = np.array(o.matrix_world); co = co.reshape(-1, 3) @ M[:3, :3].T + M[:3, 3]
-        gid = me.attributes.get('gid'); sent = me.attributes.get('sent')
-        if gid is not None and len(gid.data) == n:
-            g = np.zeros(n, np.int32); gid.data.foreach_get('value', g)
-            base = flat[g]
-            if sent is not None: base = np.zeros(n, np.float32); sent.data.foreach_get('value', base)
-            ch = np.abs(co[:, 2] - base) > 0.02
-            np.add.at(acc, g[ch], co[ch, 2]); np.add.at(cnt, g[ch], 1)
-        elif n == NV * NV:      # a whole-valley mesh, as older files had
-            ch = np.abs(co[:, 2] - flat) > 0.02; acc[ch] += co[ch, 2]; cnt[ch] += 1
-        else:                   # remeshed: look straight down onto it at every grid point it covers
-            from mathutils.bvhtree import BVHTree
-            from mathutils import Vector
-            bvh = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get()); Mi = o.matrix_world.inverted()
-            dv = (Mi.to_3x3() @ Vector((0, 0, -1.0))).normalized(); xs = -HALF + np.arange(NV) * CELL
-            x0, y0 = co[:, 0].min(), co[:, 1].min(); x1, y1 = co[:, 0].max(), co[:, 1].max()
-            for j in range(NV):
-                if not (y0 - 1 <= -xs[j] <= y1 + 1): continue
-                for i in range(NV):
-                    if not (x0 - 1 <= xs[i] <= x1 + 1): continue
-                    hit = bvh.ray_cast(Mi @ Vector((xs[i], -xs[j], 900.0)), dv)
-                    if hit[0] is not None:
-                        z = (o.matrix_world @ hit[0]).z; c = j * NV + i
-                        if abs(z - flat[c]) > 0.02: acc[c] += z; cnt[c] += 1
-            notes.append(o.name + ' was remeshed, so it was read by looking down onto it')
-    out = flat.copy(); m = cnt > 0; out[m] = acc[m] / cnt[m]
-    return out.reshape(NV, NV), notes
+def make_water():
+    wc = coll('Water'); wp = bpy.data.meshes.new('Water'); bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=HALF); bm.to_mesh(wp); bm.free()
+    wm = bpy.data.materials.new('Water'); nodes_on(wm); b = next(n for n in wm.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    b.inputs['Base Color'].default_value = (0.1, 0.4, 0.75, 1); b.inputs['Alpha'].default_value = 0.55; wm.diffuse_color = (0.1, 0.4, 0.75, 0.5)
+    try: wm.surface_render_method = 'BLENDED'
+    except Exception: pass
+    wp.materials.append(wm); w = bpy.data.objects.new('Water', wp); w.hide_select = True; wc.objects.link(w)
+
+
+def read_terrain(o, flat, acc, cnt, NV, CELL):
+    """Adds what was changed in this zone to acc and cnt (where two zones share a border point and both
+    changed it, the game takes their average). Returns a note if the zone had to be read another way."""
+    me = o.data; n = len(me.vertices); co = np.zeros(n * 3, np.float32); me.vertices.foreach_get('co', co)
+    M = np.array(o.matrix_world); co = co.reshape(-1, 3) @ M[:3, :3].T + M[:3, 3]
+    gid = me.attributes.get('gid'); sent = me.attributes.get('sent')
+    if gid is not None and len(gid.data) == n:
+        g = np.zeros(n, np.int32); gid.data.foreach_get('value', g)
+        base = flat[g]
+        if sent is not None: base = np.zeros(n, np.float32); sent.data.foreach_get('value', base)
+        ch = np.abs(co[:, 2] - base) > 0.02
+        np.add.at(acc, g[ch], co[ch, 2]); np.add.at(cnt, g[ch], 1)
+        return None
+    # remeshed: look straight down onto it at every grid point it covers
+    from mathutils.bvhtree import BVHTree
+    from mathutils import Vector
+    bvh = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get()); Mi = o.matrix_world.inverted()
+    dv = (Mi.to_3x3() @ Vector((0, 0, -1.0))).normalized(); xs = -HALF + np.arange(NV) * CELL
+    x0, y0 = co[:, 0].min(), co[:, 1].min(); x1, y1 = co[:, 0].max(), co[:, 1].max()
+    for j in range(NV):
+        if not (y0 - 1 <= -xs[j] <= y1 + 1): continue
+        for i in range(NV):
+            if not (x0 - 1 <= xs[i] <= x1 + 1): continue
+            hit = bvh.ray_cast(Mi @ Vector((xs[i], -xs[j], 900.0)), dv)
+            if hit[0] is not None:
+                z = (o.matrix_world @ hit[0]).z; c = j * NV + i
+                if abs(z - flat[c]) > 0.02: acc[c] += z; cnt[c] += 1
+    return o.name + ' was remeshed, so it was read by looking down onto it'
 
 
 # ---------------------------------------------------------------- places from data.js
@@ -165,7 +209,8 @@ def places():
     except Exception as e: print('  (could not read the places from src/data.js: %s)' % e); return None
 
 
-def make_places(P, H, regions, CELL, col):
+def make_places(P, H, regions, CELL, col, zone):
+    """An arrow for every place from data.js in this zone, with its name."""
     if not P: return
     def h(x, z):
         i = int(round((x + HALF) / CELL)); j = int(round((z + HALF) / CELL)); n = H.shape[0] - 1
@@ -178,10 +223,10 @@ def make_places(P, H, regions, CELL, col):
     pts += [('Spot: ' + e.get('kind', 'extra'), e) for e in P['extra']]
     if P.get('springs'): pts.append(('Hot springs', P['springs']))
     for name, p in pts:
-        o = bpy.data.objects.new(name, None); o.empty_display_type = 'SINGLE_ARROW'; o.empty_display_size = 6
-        o.location = (p['x'], -p['z'], h(p['x'], p['z'])); o.show_name = True; o.show_in_front = True
         i = min(max(int(round((p['x'] + HALF) / CELL)), 0), H.shape[0] - 1); j = min(max(int(round((p['z'] + HALF) / CELL)), 0), H.shape[0] - 1)
-        coll(ZONES[int(regions[j, i])][2] + ' places', col).objects.link(o)
+        if int(regions[j, i]) != zone: continue
+        o = bpy.data.objects.new(name, None); o.empty_display_type = 'SINGLE_ARROW'; o.empty_display_size = 6
+        o.location = (p['x'], -p['z'], h(p['x'], p['z'])); o.show_name = True; o.show_in_front = True; col.objects.link(o)
 
 
 # ---------------------------------------------------------------- the kit of building pieces
@@ -243,21 +288,37 @@ class Piece:
         col.objects.link(o); return o
 
 
-def shelf_spot(k):
-    """Where the k-th piece stands on the shelf, just north of the map."""
-    return (-63 + (k % 8) * 18, 352 + (k // 8) * 20, 0)
+# where each file's shelf of pieces stands, just outside what the file shows: the first piece, the
+# step along a row of eight, and the step to the next row
+SHELF = {'kit': ((-63, 352), (18, 0), (0, 20)), 'storm': ((-63, 352), (18, 0), (0, 20)), 'meadow': ((-63, 215), (18, 0), (0, 20)),
+         'tide': ((-63, -352), (18, 0), (0, -20)), 'ember': ((352, 63), (0, -18), (20, 0)), 'gloam': ((-352, 63), (0, -18), (-20, 0))}
 
 
-def make_shelf():
-    sc = coll('Shelf'); me = bpy.data.meshes.new('Shelf'); bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1.0); bm.to_mesh(me); bm.free()
-    m = bpy.data.materials.new('Shelf'); nodes_on(m); b = next(n for n in m.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+def shelf_pos(key, k):
+    (ox, oy), (ax, ay), (bx, by) = SHELF[key]; r, c = divmod(k, 8)
+    return (ox + ax * c + bx * r, oy + ay * c + by * r, 0)
+
+
+def make_slab(key, n, col):
+    """The dark slab the shelf pieces stand on. Anything standing on it counts as a shelf piece."""
+    pts = np.array([shelf_pos(key, k)[:2] for k in range(max(n, 8))]); lo, hi = pts.min(0) - 11, pts.max(0) + 11
+    me = bpy.data.meshes.new('Shelf'); bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1.0); bm.to_mesh(me); bm.free()
+    m = bpy.data.materials.get('Shelf') or bpy.data.materials.new('Shelf'); nodes_on(m); b = next(n_ for n_ in m.node_tree.nodes if n_.type == 'BSDF_PRINCIPLED')
     b.inputs['Base Color'].default_value = (0.08, 0.08, 0.09, 1); m.diffuse_color = (0.08, 0.08, 0.09, 1); me.materials.append(m)
-    o = bpy.data.objects.new('Shelf', me); o.location = (-0.0, 362, -0.3); o.scale = (160, 46, 0.5); o.hide_select = True; sc.objects.link(o)
+    o = bpy.data.objects.new('Shelf', me); o.location = ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, -0.3); o.scale = (hi[0] - lo[0], hi[1] - lo[1], 0.5)
+    o.hide_select = True; col.objects.link(o); return o
+
+
+def on_slab(o):
+    sl = bpy.data.objects.get('Shelf')
+    if not sl: return False
+    p = o.matrix_world.translation; c = sl.location; s = sl.scale
+    return abs(p.x - c.x) <= s.x / 2 and abs(p.y - c.y) <= s.y / 2
 
 
 def make_kit(col):
     WALL, PLASTER, ROOF, WOOD, DARK, STONE, SLATE, GLOW = 0xe6dac0, 0xf1e9d6, 0xa5482e, 0x7a5434, 0x4e3624, 0xa8a296, 0x56606e, 0xffd98a
-    out = []; spot = shelf_spot
+    out = []; spot = lambda k: shelf_pos('kit', k)
     p = Piece('cottage')
     p.box(6, 5, 3.2, mat=kmat(PLASTER)).box(6.2, 5.2, 0.5, mat=kmat(STONE))
     p.roof(7, 5.8, 2.6, z=3.2, mat=kmat(ROOF), rot=math.pi / 2)
@@ -337,55 +398,26 @@ def make_kit(col):
     return out
 
 
-def kit_names(col):
-    return {o.name: o for o in col.objects if o.type == 'MESH'}
+# ---------------------------------------------------------------- Kit.blend and the shelf copies
+def kit_pieces():
+    """In Kit.blend, every mesh is a piece, except the shelf it stands on and the figure for scale."""
+    return [o for o in bpy.context.scene.objects if o.type == 'MESH' and not any(c.name in ('Shelf', 'Reference') for c in o.users_collection)]
 
 
-def base_name(n):
-    return n.rsplit('.', 1)[0] if '.' in n and n.rsplit('.', 1)[1].isdigit() else n
-
-
-# ---------------------------------------------------------------- send
-def send():
-    N, NV, CELL, H, roads, regions, sc = grid()
-    fresh = not os.path.exists(BLEND)
-    if not fresh:
-        bpy.ops.wm.open_mainfile(filepath=BLEND)
-        try: brought = json.load(open(BROUGHT))
-        except Exception: brought = {}
-        objs = terrain_objects()
-        busy = [o.name for o in objs if fingerprint(o) not in (o.get('sent', ''), brought.get(o.name, ''))]
-        if busy:
-            print('\nSculpting in %s is not in the game yet, so the terrain was left as it is.' % ', '.join(busy))
-            print('Bring it into the game first (blender/Bring world into game.command), or delete blender/world.blend to start over.\n')
-            return
-        for o in objs: me = o.data; bpy.data.objects.remove(o); bpy.data.meshes.remove(me)
-        pc = bpy.data.collections.get('Places')
-        if pc:
-            for o in list(pc.all_objects): bpy.data.objects.remove(o)
-    else:
-        bpy.ops.wm.read_factory_settings(use_empty=True)
-    sc_ = bpy.context.scene; sc_.unit_settings.system = 'METRIC'
-    make_zones(N, NV, CELL, H, roads, regions, coll('Terrain'))
-    make_places(places(), H, regions, CELL, coll('Places'))
-    if fresh:
-        wc = coll('Water'); wp = bpy.data.meshes.new('Water'); bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=HALF); bm.to_mesh(wp); bm.free()
-        wm = bpy.data.materials.new('Water'); nodes_on(wm); b = next(n for n in wm.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
-        b.inputs['Base Color'].default_value = (0.1, 0.4, 0.75, 1); b.inputs['Alpha'].default_value = 0.55; wm.diffuse_color = (0.1, 0.4, 0.75, 0.5)
-        try: wm.surface_render_method = 'BLENDED'
-        except Exception: pass
-        wp.materials.append(wm); w = bpy.data.objects.new('Water', wp); w.hide_select = True; wc.objects.link(w)
-        make_shelf(); kc = coll('Kit'); pieces = make_kit(kc)
-        known = {o.name for o in pieces}
-        # pieces you made earlier come back from their saved models
-        if os.path.isdir(KITDIR):
-            for f in sorted(os.listdir(KITDIR)):
-                if f.endswith('.glb') and f[:-4] not in known: import_piece(f[:-4], kc, len(known)); known.add(f[:-4])
-        pc = coll('Placed'); restore_placed(pc, kit_names(kc))
-        cam_setup()
-    os.makedirs(os.path.dirname(BLEND), exist_ok=True)
-    bpy.ops.wm.save_as_mainfile(filepath=BLEND, compress=True, relative_remap=True)
-    print('\nWrote blender/world.blend (%s).\n' % ('new' if fresh else 'terrain and places refreshed'))
+def make_kit_file():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    kc = coll('Kit'); pieces = make_kit(kc); known = {o.name for o in pieces}
+    if os.path.isdir(KITDIR):   # pieces you made earlier come back from their saved models
+        for f in sorted(os.listdir(KITDIR)):
+            if f.endswith('.glb') and f[:-4] not in known: import_piece(f[:-4], kc, len(known)); known.add(f[:-4])
+    make_slab('kit', len(known), coll('Shelf'))
+    # a plain figure as tall as the hero, for scale
+    p = Piece('Hero (2 tall, for scale)'); p.box(0.7, 0.45, 1.3, mat=kmat(0x3a4a8a)).box(0.6, 0.6, 0.6, z=1.35, mat=kmat(0xe8c0a0))
+    p.done(coll('Reference'), (-63, 340, 0)); bpy.data.objects['Hero (2 tall, for scale)'].hide_select = True
+    view(0, 362, 110)
+    # written without the window manager, which would carry this computer's home folder into a file
+    # that is shared on GitHub (the screens keep the view)
+    bpy.data.libraries.write(KIT_BLEND, set(bpy.data.scenes) | set(bpy.data.workspaces) | set(bpy.data.screens), path_remap='RELATIVE_ALL', compress=False)
 
 
 def import_piece(name, kc, k):
@@ -396,89 +428,149 @@ def import_piece(name, kc, k):
     keep = meshes[0]
     if len(meshes) > 1:
         with bpy.context.temp_override(active_object=keep, selected_editable_objects=meshes): bpy.ops.object.join()
-    keep.parent = None; keep.matrix_world = Matrix.Translation(shelf_spot(k))
+    keep.parent = None; keep.matrix_world = Matrix.Translation(shelf_pos('kit', k))
     keep.name = name; keep.data.name = name; keep.show_name = True
-    info = json.load(open(os.path.join(WORLD, 'placed.json'))).get('kit', {}).get(name, {}) if os.path.exists(os.path.join(WORLD, 'placed.json')) else {}
-    keep['solid'] = info.get('solid', 1)
+    pj = os.path.join(WORLD, 'placed.json')
+    keep['solid'] = (json.load(open(pj)).get('kit', {}).get(name, {}) if os.path.exists(pj) else {}).get('solid', 1)
     for c in list(keep.users_collection): c.objects.unlink(keep)
     kc.objects.link(keep)
     for o in new:
         if o != keep and o.name in bpy.data.objects: bpy.data.objects.remove(o)
 
 
-def restore_placed(pc, kit):
+def append_kit():
+    """A fresh copy of every piece in Kit.blend (not yet in the scene), as {name: object}."""
+    with bpy.data.libraries.load(KIT_BLEND, link=False) as (src, dst):
+        dst.objects = list(src.objects)
+    out = {}
+    for o in dst.objects:
+        if o is None: continue
+        if o.type != 'MESH' or o.name.startswith('Shelf') or o.name.startswith('Hero ('): bpy.data.objects.remove(o); continue
+        out[clean(o.name)] = o
+    return out
+
+
+def shelf_in_zone(key):
+    """The zone file's shelf: copies of the Kit.blend pieces to place from. Copies already here get the
+    latest shape from Kit.blend (and so does everything placed from them)."""
+    sc = coll('Kit shelf (copies from Kit.blend)')
+    on = lambda: sorted((o for o in sc.objects if o.type == 'MESH' and o.name != 'Shelf' and on_slab(o)), key=lambda o: (o.name != base_name(o.name), o.name))
+    have = {}
+    for o in on(): have.setdefault(clean(o.name), o)
+    new = append_kit(); slot = len(have)
+    for name, o in sorted(new.items(), key=lambda t: (t[1].location.y, t[1].location.x)):
+        old = have.get(name)
+        if old:
+            old.data.user_remap(o.data); old['solid'] = o.get('solid', 1); bpy.data.objects.remove(o)
+        else:
+            sc.objects.link(o); o.matrix_world = Matrix.Translation(shelf_pos(key, slot)); o.show_name = True; o.name = name; slot += 1
+    bpy.data.orphans_purge(do_recursive=True)
+    if not bpy.data.objects.get('Shelf'): make_slab(key, slot, sc)
+    out = {}
+    for o in on(): out.setdefault(clean(o.name), o)
+    for name, o in out.items(): o.data.name = name
+    return out
+
+
+def restore_placed(k, shelf, H, regions, NV, CELL):
+    """Pieces placed in this zone (from assets/world/placed.json), as linked copies of the shelf."""
     path = os.path.join(WORLD, 'placed.json')
     if not os.path.exists(path): return
-    from mathutils import Quaternion, Vector
-    _, NV, CELL, H, *_ = grid()
+    pc = coll('Placed')
     for p in json.load(open(path)).get('placed', []):
-        src = kit.get(p['kit'])
-        if not src: continue
-        o = bpy.data.objects.new(p['kit'], src.data)   # a linked copy: it shares the piece's mesh
-        x, z = p['x'], p['z']; i = int(round((x + HALF) / CELL)); j = int(round((z + HALF) / CELL))
+        x, z = p['x'], p['z']; i = min(max(int(round((x + HALF) / CELL)), 0), NV - 1); j = min(max(int(round((z + HALF) / CELL)), 0), NV - 1)
+        src = shelf.get(p['kit'])
+        if not src or int(regions[j, i]) != k: continue
+        o = bpy.data.objects.new(p['kit'], src.data)
         qx, qy, qz, qw = p.get('q', [0, 0, 0, 1]); sx, sy, sz = p.get('s', [1, 1, 1])
-        o.location = (x, -z, float(H[min(max(j, 0), NV - 1), min(max(i, 0), NV - 1)]) + p.get('lift', 0))
+        o.location = (x, -z, float(H[j, i]) + p.get('lift', 0))
         o.rotation_mode = 'QUATERNION'; o.rotation_quaternion = Quaternion((qw, qx, -qz, qy)); o.scale = (sx, sz, sy)
         pc.objects.link(o)
 
 
-def cam_setup():
-    for scr in bpy.data.screens:
-        for a in scr.areas:
-            if a.type != 'VIEW_3D': continue
-            for s in a.spaces:
-                if s.type != 'VIEW_3D': continue
-                s.shading.type = 'MATERIAL'; s.clip_end = 4000; s.clip_start = 0.1
-                r = s.region_3d; r.view_distance = 520; r.view_location = (0, 0, 0)
+# ---------------------------------------------------------------- send
+def send():
+    N, NV, CELL, H, roads, regions, sc = grid(); P = places()
+    if not os.path.exists(KIT_BLEND): make_kit_file(); print('Made blender/Kit.blend.')
+    try: brought = json.load(open(BROUGHT))
+    except Exception: brought = {}
+    for k, key, name, tag in ZONES:
+        path = zone_path(name); fresh = not os.path.exists(path)
+        if fresh: bpy.ops.wm.read_factory_settings(use_empty=True)
+        else:
+            bpy.ops.wm.open_mainfile(filepath=path)
+            tc = bpy.data.collections.get('Terrain'); objs = [o for o in tc.all_objects if o.type == 'MESH'] if tc else []
+            if any(fingerprint(o) not in (o.get('sent', ''), brought.get(name, '')) for o in objs):
+                print('%s: has sculpting that is not in the game yet, so it was left as it is (bring it in first).' % name); continue
+            for c in ('Terrain', 'Around (for reference)', 'Places'):
+                cc = bpy.data.collections.get(c)
+                for o in list(cc.all_objects) if cc else []:
+                    me = o.data if o.type == 'MESH' else None; bpy.data.objects.remove(o)
+                    if me: bpy.data.meshes.remove(me)
+        bpy.context.scene.unit_settings.system = 'METRIC'
+        o, cx, cy, size = make_zone(k, name, tag, N, NV, CELL, H, roads, regions)
+        make_places(P, H, regions, CELL, coll('Places'), k)
+        shelf = shelf_in_zone(key)
+        if fresh: make_water(); restore_placed(k, shelf, H, regions, NV, CELL); view(cx, cy, size * 1.05)
+        save(path)
+        print('%s: %s.' % (name, 'made' if fresh else 'terrain, places and shelf refreshed'))
 
 
 # ---------------------------------------------------------------- bring
 def bring():
-    if not os.path.exists(BLEND): sys.exit('There is no blender/world.blend yet: send the world to Blender first.')
-    bpy.ops.wm.open_mainfile(filepath=BLEND)
     N, NV, CELL, H, roads, regions, sc = grid()
-    objs = terrain_objects()
-    if not objs: sys.exit('blender/world.blend has no terrain in its Terrain collection.')
-    hs, notes = read_terrain(objs, H, NV, CELL)
-    json.dump({o.name: fingerprint(o) for o in objs}, open(BROUGHT, 'w'))
-    gen = H - sc                                   # the land as generated, before any sculpting
-    d = (hs - gen).astype(np.float32); d[np.abs(d) < 0.02] = 0
+    files = [(k, name, zone_path(name)) for k, _, name, _ in ZONES if os.path.exists(zone_path(name))]
+    if not files and not os.path.exists(KIT_BLEND): sys.exit('There are no Blender files yet: run Update Blender files first.')
+    # the kit: every piece in Kit.blend becomes a model the game can load
+    info = {}
+    if os.path.exists(KIT_BLEND):
+        bpy.ops.wm.open_mainfile(filepath=KIT_BLEND); os.makedirs(KITDIR, exist_ok=True)
+        for o in kit_pieces():
+            name = clean(o.name)
+            if name in info: continue
+            keep = o.matrix_world.copy(); o.matrix_world = Matrix.Identity(4)
+            for x in bpy.context.view_layer.objects: x.select_set(False)
+            try:
+                o.select_set(True); bpy.context.view_layer.objects.active = o
+                bpy.ops.export_scene.gltf(filepath=os.path.join(KITDIR, name + '.glb'), export_format='GLB', use_selection=True, export_apply=True, export_animations=False, export_yup=True)
+            finally: o.matrix_world = keep
+            info[name] = {'file': 'models/kit/%s.glb' % name, 'solid': int(o.get('solid', 1))}
+    else:
+        pj = os.path.join(WORLD, 'placed.json'); info = json.load(open(pj)).get('kit', {}) if os.path.exists(pj) else {}
+    # each zone: what was sculpted, and what was placed
+    flat = H.ravel(); acc = np.zeros(NV * NV); cnt = np.zeros(NV * NV); brought = {}; raw = []; skipped = []; notes = []
+    for k, name, path in files:
+        bpy.ops.wm.open_mainfile(filepath=path)
+        tc = bpy.data.collections.get('Terrain'); land = [o for o in tc.all_objects if o.type == 'MESH'] if tc else []
+        for o in land:
+            note = read_terrain(o, flat, acc, cnt, NV, CELL); brought[name] = fingerprint(o)
+            if note: notes.append(note)
+        skip = set(land) | {bpy.data.objects.get('Shelf'), bpy.data.objects.get('Water')}
+        for o in bpy.context.scene.objects:
+            if o.type != 'MESH' or o in skip or o.hide_select or on_slab(o): continue
+            kname = next((c for c in (clean(o.data.name), clean(o.name)) if c in info), None)
+            if not kname: skipped.append('%s (%s)' % (o.name, name)); continue
+            loc, q, s = o.matrix_world.decompose(); raw.append((kname, loc.x, -loc.y, loc.z, q, s))
+    json.dump(brought, open(BROUGHT, 'w'))
+    hs = flat.copy(); m = cnt > 0; hs[m] = acc[m] / cnt[m]; hs = hs.reshape(NV, NV)
+    d = (hs - (H - sc)).astype(np.float32); d[np.abs(d) < 0.02] = 0   # against the land as generated
     sp = os.path.join(WORLD, 'sculpt.bin')
     if d.any(): d.astype('<f4').tofile(sp)
     elif os.path.exists(sp): os.remove(sp)        # nothing sculpted: no layer
-    print('Terrain: %d spots sculpted (biggest change %.1f)' % (int((d != 0).sum()), float(np.abs(d).max())))
+    print('Terrain: %d spots sculpted (biggest change %.1f), from %d zone files' % (int((d != 0).sum()), float(np.abs(d).max()), len(files)))
     for n_ in notes: print('  ' + n_)
-    # what counts: anything standing off the map (on the shelf, north of it) is a piece of the kit, and
-    # anything on the map is placed. The collections only keep things tidy.
-    land = set(terrain_objects())
-    objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o not in land and not any(c.name in ('Water', 'Shelf') for c in o.users_collection)]
-    off = lambda o: max(abs(o.matrix_world.translation.x), abs(o.matrix_world.translation.y)) > HALF + 2
-    kit = {}
-    for o in sorted((o for o in objs if off(o)), key=lambda o: (o.name != base_name(o.name), o.name)):
-        kit.setdefault(re.sub(r'[^A-Za-z0-9_-]+', '_', base_name(o.name)), o)
-    os.makedirs(KITDIR, exist_ok=True); info = {}
-    for name, o in kit.items():
-        keep = o.matrix_world.copy(); o.matrix_world = Matrix.Identity(4)
-        for x in bpy.context.view_layer.objects: x.select_set(False)
-        try:
-            o.select_set(True); bpy.context.view_layer.objects.active = o
-            bpy.ops.export_scene.gltf(filepath=os.path.join(KITDIR, name + '.glb'), export_format='GLB', use_selection=True, export_apply=True, export_animations=False, export_yup=True)
-        finally: o.matrix_world = keep
-        info[name] = {'file': 'models/kit/%s.glb' % name, 'solid': int(o.get('solid', 1))}
-    # what you set out on the terrain
-    placed = []; skipped = []
-    byMesh = {o.data.name: n for n, o in kit.items()}; byName = {base_name(o.name): n for n, o in kit.items()}
-    for o in objs:
-        if off(o): continue
-        k = byMesh.get(o.data.name) or byName.get(base_name(o.data.name)) or byName.get(base_name(o.name))
-        if not k: skipped.append(o.name); continue
-        loc, q, s = o.matrix_world.decompose(); x, z = loc.x, -loc.y
-        i = int(round((x + HALF) / CELL)); j = int(round((z + HALF) / CELL)); gh = float(hs[min(max(j, 0), NV - 1), min(max(i, 0), NV - 1)])
-        placed.append({'kit': k, 'x': round(x, 3), 'z': round(z, 3), 'lift': round(loc.z - gh, 3),
+    placed = []; seen = set()
+    for kname, x, z, y, q, s in raw:
+        key = (kname, round(x, 2), round(z, 2))
+        if key in seen: continue                   # the same piece in two files
+        seen.add(key); i = min(max(int(round((x + HALF) / CELL)), 0), NV - 1); j = min(max(int(round((z + HALF) / CELL)), 0), NV - 1)
+        placed.append({'kit': kname, 'x': round(x, 3), 'z': round(z, 3), 'lift': round(y - float(hs[j, i]), 3),
                        'q': [round(q.x, 5), round(q.z, 5), round(-q.y, 5), round(q.w, 5)], 's': [round(s.x, 4), round(s.z, 4), round(s.y, 4)]})
-    json.dump({'kit': info, 'placed': placed}, open(os.path.join(WORLD, 'placed.json'), 'w'), indent=1)
+    if not files and os.path.exists(os.path.join(WORLD, 'placed.json')): placed = json.load(open(os.path.join(WORLD, 'placed.json'))).get('placed', [])
+    placed.sort(key=lambda p: (p['kit'], p['x'], p['z']))          # a steady order, so the file only changes when you do
+    json.dump({'kit': dict(sorted(info.items())), 'placed': placed}, open(os.path.join(WORLD, 'placed.json'), 'w'), indent=1)
     print('Kit: %d pieces saved to assets/models/kit. Placed: %d pieces.' % (len(info), len(placed)))
-    if skipped: print('  On the map but not a copy of a piece on the shelf, so left out:', ', '.join(skipped[:12]), '...' if len(skipped) > 12 else '')
+    if skipped: print('  Not a copy of a Kit piece, so left out:', ', '.join(skipped[:12]), '...' if len(skipped) > 12 else '')
 
 
 if __name__ == '__main__':

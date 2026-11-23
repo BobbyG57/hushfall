@@ -2,6 +2,7 @@
 node_modules/
 __pycache__/
 *.pyc
+blender/zones/
+blender/*.blend1
 blender/world.blend
-blender/world.blend1
 blender/world.brought
